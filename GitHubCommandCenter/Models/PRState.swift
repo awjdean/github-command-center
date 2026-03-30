@@ -46,6 +46,11 @@ struct PRState: Identifiable, Equatable, Sendable {
         let assignedToMe: Bool
     }
 
+    enum TriageCategory: Sendable {
+        case needsYourAction
+        case waitingOnOthers
+    }
+
     // MARK: - Computed
 
     var id: String {
@@ -105,9 +110,4 @@ struct PRState: Identifiable, Equatable, Sendable {
         if assignment.createdByMe { return "Your PR" }
         return ""
     }
-}
-
-enum TriageCategory: Sendable {
-    case needsYourAction
-    case waitingOnOthers
 }
