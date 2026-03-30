@@ -81,6 +81,23 @@ depends = ["check-style", "test"]
 description = "Fix all formatting + lint issues"
 run = ["mise run sync", "mise run fix-style"]
 
+[tasks.start]
+description = "Build and launch the app"
+depends = ["sync"]
+run = """
+xcodebuild \
+  -project GitHubCommandCenter.xcodeproj \
+  -scheme GitHubCommandCenter \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  -derivedDataPath build/DerivedData \
+  CODE_SIGN_IDENTITY="" \
+  CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGNING_ALLOWED=NO \
+  build && \
+open build/DerivedData/Build/Products/Debug/GitHubCommandCenter.app
+"""
+
 [tasks."hooks:install"]
 description = "Install git pre-commit hooks via hk"
 run = "hk install --mise"
