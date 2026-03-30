@@ -3,6 +3,7 @@ import UserNotifications
 
 final class NotificationService {
     static let shared = NotificationService()
+    private static let pullRequestUpdatesThreadIdentifier = "pull_request_updates"
 
     // Injected in tests to capture fired notifications without UNUserNotificationCenter.
     var notificationHandler: ((String, String) -> Void)?  // (title, body)
@@ -109,6 +110,7 @@ final class NotificationService {
         content.title = title
         content.body = body
         content.sound = .default
+        content.threadIdentifier = Self.pullRequestUpdatesThreadIdentifier
 
         let request = UNNotificationRequest(
             identifier: UUID().uuidString,
