@@ -84,12 +84,18 @@ struct PRState: Identifiable, Equatable, Sendable {
         guard draftStatus == .ready else { return 0 }
         var score = 0
         if case .failing = ciStatus, assignment.createdByMe { score += 3 }
-        if case .changesRequested = reviewStatus { score += 3 }
+        if case .changesRequested = reviewStatus, assignment.createdByMe { score += 3 }
         if mergeStatus == .conflicts { score += 2 }
         if assignment.reviewRequestedFromMe { score += 2 }
         if assignment.assignedToMe && !assignment.createdByMe { score += 1 }
         if case .approved = reviewStatus, mergeStatus == .ready, assignment.createdByMe { score += 1 }
         return score
+    }
+
+    static func compareForNeedsAction(_ lhs: PRState, _ rhs: PRState) -> Bool {
+        lhs.urgencyScore != rhs.urgencyScore
+            ? lhs.urgencyScore > rhs.urgencyScore
+            : lhs.updatedAt > rhs.updatedAt
     }
 
     // Highest-precedence role label for display in the PR row

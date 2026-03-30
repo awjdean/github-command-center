@@ -2,6 +2,7 @@ import Foundation
 
 enum AppError: LocalizedError, Sendable, Equatable {
     case authError
+    case incompleteSearchResults
     case noToken
     case rateLimitExceeded(resetAt: Date)
     case networkError
@@ -11,6 +12,8 @@ enum AppError: LocalizedError, Sendable, Equatable {
         switch self {
         case .authError:
             return "Authentication failed. Check your GitHub token."
+        case .incompleteSearchResults:
+            return "GitHub search returned incomplete results. Try again later or narrow the search."
         case .noToken:
             return "No GitHub token configured."
         case .rateLimitExceeded(let date):
