@@ -11,21 +11,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: jdx/mise-action@v3
+        with:
+          install: true
+
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.app
 
       - name: Build (unsigned)
-        run: |
-          xcodebuild \
-            -project GitHubCommandCenter.xcodeproj \
-            -scheme GitHubCommandCenter \
-            -configuration Release \
-            -destination 'platform=macOS' \
-            -derivedDataPath build/DerivedData \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            build
+        run: mise run build-release
 
       - name: Create .zip for distribution
         run: |
