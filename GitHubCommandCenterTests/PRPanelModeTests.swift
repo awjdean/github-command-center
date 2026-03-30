@@ -6,8 +6,12 @@ import Testing
 @Suite
 struct PRPanelModeTests {
     @Test
+    func panelModeHasExpectedWidth() {
+        #expect(PanelMode.width == 360)
+    }
+
+    @Test
     func pullRequestsModeUsesPRPanelPresentation() {
-        #expect(PanelMode.pullRequests.width == 360)
         #expect(PanelMode.pullRequests.headerTitle == "GitHub Command Center")
         #expect(PanelMode.pullRequests.showsBackButton == false)
         #expect(PanelMode.pullRequests.showsRefreshRow == true)
@@ -16,7 +20,6 @@ struct PRPanelModeTests {
 
     @Test
     func settingsModeUsesCompactInlineSettingsPresentation() {
-        #expect(PanelMode.settings.width == 360)
         #expect(PanelMode.settings.headerTitle == "Settings")
         #expect(PanelMode.settings.showsBackButton == true)
         #expect(PanelMode.settings.showsRefreshRow == false)

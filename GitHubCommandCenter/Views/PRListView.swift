@@ -4,9 +4,7 @@ enum PanelMode {
     case pullRequests
     case settings
 
-    var width: CGFloat {
-        360
-    }
+    static let width: CGFloat = 360
 
     var headerTitle: String {
         switch self {
@@ -43,7 +41,7 @@ struct PRListView: View {
             contentView
             footerView
         }
-        .frame(width: panelMode.width)
+        .frame(width: PanelMode.width)
         .background(Color.panelBackground)
         .animation(.easeInOut(duration: 0.2), value: panelMode)
         .onAppear {
@@ -102,29 +100,28 @@ struct PRListView: View {
         }
     }
 
+    @ViewBuilder
     private var bannerSection: some View {
-        Group {
-            if panelMode == .pullRequests {
-                if appState.isRateLimited {
-                    warningBar(
-                        text: "Rate limited"
-                            + (appState.rateLimitResetDate.map {
-                                " — resets \(RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date()))"
-                            } ?? ""),
-                        color: .statusRed
-                    )
-                } else if appState.isStale {
-                    warningBar(
-                        text: "Data may be outdated — last update \(formattedLastUpdated)",
-                        color: .statusYellow
-                    )
-                }
+        if panelMode == .pullRequests {
+            if appState.isRateLimited {
+                warningBar(
+                    text: "Rate limited"
+                        + (appState.rateLimitResetDate.map {
+                            " — resets \(Self.relativeDateFormatter.localizedString(for: $0, relativeTo: Date()))"
+                        } ?? ""),
+                    color: .statusRed
+                )
+            } else if appState.isStale {
+                warningBar(
+                    text: "Data may be outdated — last update \(formattedLastUpdated)",
+                    color: .statusYellow
+                )
+            }
 
-                if case .failed = appState.authenticationStatus {
-                    authErrorBanner
-                } else if case .noToken = appState.authenticationStatus {
-                    noTokenBanner
-                }
+            if case .failed = appState.authenticationStatus {
+                authErrorBanner
+            } else if case .noToken = appState.authenticationStatus {
+                noTokenBanner
             }
         }
     }
@@ -152,7 +149,7 @@ struct PRListView: View {
                         sectionHeader("RECENTLY CLOSED")
                         ForEach(appState.recentlyClosedPRs) { pr in
                             PRRowView(pr: pr).opacity(0.5)
-                            Divider().background(Color.textMuted.opacity(0.2))
+                            themedDivider()
                         }
                     }
                 }
@@ -175,7 +172,7 @@ struct PRListView: View {
             sectionHeader("NEEDS YOUR ACTION")
             ForEach(needsAction) { pr in
                 PRRowView(pr: pr)
-                Divider().background(Color.textMuted.opacity(0.2))
+                themedDivider()
             }
         }
 
@@ -183,7 +180,7 @@ struct PRListView: View {
             sectionHeader("WAITING ON OTHERS")
             ForEach(waiting) { pr in
                 PRRowView(pr: pr).opacity(0.55)
-                Divider().background(Color.textMuted.opacity(0.2))
+                themedDivider()
             }
         }
     }
@@ -205,7 +202,7 @@ struct PRListView: View {
         VStack(spacing: 0) {
             ForEach(0..<3, id: \.self) { _ in
                 SkeletonRowView()
-                Divider().background(Color.textMuted.opacity(0.2))
+                themedDivider()
             }
         }
     }
@@ -333,50 +330,57 @@ struct PRListView: View {
 
     // MARK: - Footer
 
+    @ViewBuilder
     private var footerView: some View {
-        Group {
-            if panelMode.showsRefreshRow {
-                VStack(spacing: 0) {
-                    Divider().background(Color.textMuted.opacity(0.2))
+        if panelMode.showsRefreshRow {
+            VStack(spacing: 0) {
+                themedDivider()
 
-                    HStack {
-                        if appState.lastUpdated != nil {
-                            Text("Updated \(formattedLastUpdated)")
-                                .font(.footerText)
-                                .foregroundColor(.textMuted)
-                        } else {
-                            Text(appState.isLoading ? "Loading…" : "Never updated")
-                                .font(.footerText)
-                                .foregroundColor(.textMuted)
-                        }
-
-                        Spacer()
-
-                        Button {
-                            appState.forceRefresh()
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                                .imageScale(.small)
-                                .foregroundColor(.textTertiary)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Refresh (⌘R)")
-                        .keyboardShortcut("r", modifiers: .command)
+                HStack {
+                    if appState.lastUpdated != nil {
+                        Text("Updated \(formattedLastUpdated)")
+                            .font(.footerText)
+                            .foregroundColor(.textMuted)
+                    } else {
+                        Text(appState.isLoading ? "Loading…" : "Never updated")
+                            .font(.footerText)
+                            .foregroundColor(.textMuted)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+
+                    Spacer()
+
+                    Button {
+                        appState.forceRefresh()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .imageScale(.small)
+                            .foregroundColor(.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Refresh (⌘R)")
+                    .keyboardShortcut("r", modifiers: .command)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             }
         }
     }
 
     // MARK: - Helpers
 
-    private var formattedLastUpdated: String {
-        guard let date = appState.lastUpdated else { return "—" }
+    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return formatter
+    }()
+
+    private func themedDivider() -> some View {
+        Divider().background(Color.textMuted.opacity(0.2))
+    }
+
+    private var formattedLastUpdated: String {
+        guard let date = appState.lastUpdated else { return "—" }
+        return Self.relativeDateFormatter.localizedString(for: date, relativeTo: Date())
     }
 }
 
@@ -409,7 +413,7 @@ private let previewPRs = [
         number: 12,
         title: "Refine menu bar panel layout",
         repoFullName: "awjdean/github-command-center",
-        url: URL("https://github.com/awjdean/github-command-center/pull/12"),
+        url: previewURL("https://github.com/awjdean/github-command-center/pull/12"),
         headSHA: "abc123",
         draftStatus: .ready,
         ciStatus: .failing(failingCheckNames: ["unit-tests"], totalChecks: 3),
@@ -422,7 +426,7 @@ private let previewPRs = [
         number: 34,
         title: "Add inline settings screen",
         repoFullName: "awjdean/github-command-center",
-        url: URL("https://github.com/awjdean/github-command-center/pull/34"),
+        url: previewURL("https://github.com/awjdean/github-command-center/pull/34"),
         headSHA: "def456",
         draftStatus: .ready,
         ciStatus: .passing,
@@ -432,6 +436,14 @@ private let previewPRs = [
         updatedAt: .now.addingTimeInterval(-3_600)
     ),
 ]
+
+private func previewURL(_ string: String) -> URL {
+    guard let url = URL(string: string) else {
+        preconditionFailure("Invalid preview URL: \(string)")
+    }
+
+    return url
+}
 
 @MainActor
 private final class PreviewPollingController: PollingControlling {
