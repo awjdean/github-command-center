@@ -4,17 +4,20 @@ import Security
 final class KeychainService: Sendable {
     static let shared = KeychainService()
 
-    private let service = "com.githubcommandcenter"
-    private let account = "github-pat"
+    private let serviceName: String
+    private let accountName: String
 
-    private init() {}
+    init(serviceName: String = "com.githubcommandcenter", accountName: String = "github-pat") {
+        self.serviceName = serviceName
+        self.accountName = accountName
+    }
 
     func saveToken(_ token: String) throws {
         let data = Data(token.utf8)
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
-            kSecAttrService: service,
-            kSecAttrAccount: account
+            kSecAttrService: serviceName,
+            kSecAttrAccount: accountName
         ]
 
         let deleteStatus = SecItemDelete(query as CFDictionary)
@@ -32,8 +35,8 @@ final class KeychainService: Sendable {
     func loadToken() throws -> String? {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
-            kSecAttrService: service,
-            kSecAttrAccount: account,
+            kSecAttrService: serviceName,
+            kSecAttrAccount: accountName,
             kSecReturnData: true,
             kSecMatchLimit: kSecMatchLimitOne
         ]
@@ -43,8 +46,11 @@ final class KeychainService: Sendable {
 
         switch status {
         case errSecSuccess:
-            guard let data = result as? Data, let token = String(data: data, encoding: .utf8) else {
-                return nil
+            guard let data = result as? Data else {
+                throw KeychainError.loadFailed(status: errSecInternalError)
+            }
+            guard let token = String(data: data, encoding: .utf8) else {
+                throw KeychainError.decodingFailed
             }
             return token
         case errSecItemNotFound:
@@ -57,8 +63,8 @@ final class KeychainService: Sendable {
     func deleteToken() throws {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
-            kSecAttrService: service,
-            kSecAttrAccount: account
+            kSecAttrService: serviceName,
+            kSecAttrAccount: accountName
         ]
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
@@ -66,13 +72,16 @@ final class KeychainService: Sendable {
         }
     }
 
-    enum KeychainError: LocalizedError {
+    enum KeychainError: LocalizedError, Equatable {
+        case decodingFailed
         case saveFailed(status: OSStatus)
         case loadFailed(status: OSStatus)
         case deleteFailed(status: OSStatus)
 
         var errorDescription: String? {
             switch self {
+            case .decodingFailed:
+                return "Stored token data could not be decoded as UTF-8."
             case .saveFailed(let s): return "Failed to save token (OSStatus \(s))"
             case .loadFailed(let s): return "Failed to load token (OSStatus \(s))"
             case .deleteFailed(let s): return "Failed to delete token (OSStatus \(s))"
