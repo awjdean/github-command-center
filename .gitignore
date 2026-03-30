@@ -1,15 +1,11 @@
 # Xcode
 build/
 DerivedData/
-*.xcodeproj/xcuserdata/
-*.xcworkspace/xcuserdata/
 xcuserdata/
-*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcuserstate
 
 # Swift Package Manager
 .build/
-Packages/
-Package.resolved
 
 # macOS
 .DS_Store
@@ -17,7 +13,7 @@ Package.resolved
 *~
 
 # XcodeGen (project is regenerated from project.yml)
-GitHubCommandCenter.xcodeproj/project.pbxproj
+*.xcodeproj/project.pbxproj
 
 # Claude Code
 .claude/settings.local.json
