@@ -16,9 +16,9 @@ extension PRState {
         assignedToMe: Bool = false,
         updatedAt: Date = Date(timeIntervalSince1970: 1_743_321_600)
     ) -> PRState {
-        let pullRequestURL =
-            URL(string: "https://github.com/\(repoFullName)/pull/\(number)")
-            ?? URL(filePath: "/")
+        guard let pullRequestURL = URL(string: "https://github.com/\(repoFullName)/pull/\(number)") else {
+            preconditionFailure("Invalid PR fixture URL for \(repoFullName)#\(number)")
+        }
 
         return PRState(
             number: number,

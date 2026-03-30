@@ -8,38 +8,67 @@ final class MockURLProtocol: URLProtocol {
         case invalidResponse(url: URL)
     }
 
+    private struct Handler {
+        let urlContains: String
+        let response: MockResponse
+        let persistent: Bool
+    }
+
     struct MockResponse {
         let data: Data
         let statusCode: Int
         let headers: [String: String]
     }
 
-    static var handlers: [(urlContains: String, response: MockResponse)] = []
-    static var capturedRequests: [URLRequest] = []
+    private static let stateQueue = DispatchQueue(label: "MockURLProtocol.state")
+    private static var handlers: [Handler] = []
+    private static var storedCapturedRequests: [URLRequest] = []
+
+    static var capturedRequests: [URLRequest] {
+        stateQueue.sync { storedCapturedRequests }
+    }
 
     static func reset() {
-        handlers = []
-        capturedRequests = []
+        stateQueue.sync {
+            handlers = []
+            storedCapturedRequests = []
+        }
     }
 
     /// Register a JSON response for any URL that contains `pattern`.
     static func stub(
         urlContains pattern: String,
+        persistent: Bool = false,
         statusCode: Int = 200,
         headers: [String: String] = [:],
         json: Any
     ) {
         let data = (try? JSONSerialization.data(withJSONObject: json)) ?? Data()
-        handlers.append((pattern, MockResponse(data: data, statusCode: statusCode, headers: headers)))
+        let handler = Handler(
+            urlContains: pattern,
+            response: MockResponse(data: data, statusCode: statusCode, headers: headers),
+            persistent: persistent
+        )
+        stateQueue.sync {
+            handlers.append(handler)
+        }
     }
 
     /// Register an empty response (for 304, 401, etc.).
     static func stub(
         urlContains pattern: String,
+        persistent: Bool = false,
         statusCode: Int,
         headers: [String: String] = [:]
     ) {
-        handlers.append((pattern, MockResponse(data: Data(), statusCode: statusCode, headers: headers)))
+        let handler = Handler(
+            urlContains: pattern,
+            response: MockResponse(data: Data(), statusCode: statusCode, headers: headers),
+            persistent: persistent
+        )
+        stateQueue.sync {
+            handlers.append(handler)
+        }
     }
 
     static func makeSession() -> URLSession {
@@ -60,13 +89,25 @@ final class MockURLProtocol: URLProtocol {
         }
 
         let urlStr = url.absoluteString
-        MockURLProtocol.capturedRequests.append(request)
+        let mock = Self.stateQueue.sync { () -> MockResponse? in
+            Self.storedCapturedRequests.append(request)
 
-        guard let matchIndex = MockURLProtocol.handlers.firstIndex(where: { urlStr.contains($0.urlContains) }) else {
+            guard let matchIndex = Self.handlers.firstIndex(where: { urlStr.contains($0.urlContains) }) else {
+                return nil
+            }
+
+            let handler = Self.handlers[matchIndex]
+            if !handler.persistent {
+                Self.handlers.remove(at: matchIndex)
+            }
+
+            return handler.response
+        }
+
+        guard let mock else {
             client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
             return
         }
-        let mock = MockURLProtocol.handlers.remove(at: matchIndex).response
 
         var headerFields = mock.headers
         headerFields["Content-Type"] = "application/json"
