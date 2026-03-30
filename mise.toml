@@ -6,7 +6,7 @@ pkl = "0.31.1"
 
 [tasks.sync]
 description = "Install all project dependencies"
-run = ["mise install", "xcodegen generate"]
+run = ["mise install", "rm -rf GitHubCommandCenter.xcodeproj", "xcodegen generate"]
 
 [tasks.open]
 description = "Open project in Xcode"
