@@ -85,9 +85,7 @@ struct PRListView: View {
                     .foregroundColor(.textTertiary)
             }
             Spacer()
-            Button {
-                openSettings()
-            } label: {
+            SettingsLink {
                 Image(systemName: "gear")
                     .imageScale(.medium)
                     .foregroundColor(.textTertiary)
@@ -237,10 +235,12 @@ struct PRListView: View {
                 .font(.footerText)
                 .foregroundColor(.textSecondary)
             Spacer()
-            Button(buttonLabel) { openSettings() }
-                .font(.footerText)
-                .foregroundColor(.linkBlue)
-                .buttonStyle(.plain)
+            SettingsLink {
+                Text(buttonLabel)
+                    .font(.footerText)
+                    .foregroundColor(.linkBlue)
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -334,11 +334,6 @@ struct PRListView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
-    }
-
-    private func openSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        NSApp.activate(ignoringOtherApps: true)
     }
 }
 
