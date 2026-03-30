@@ -302,9 +302,7 @@ struct PollingEngineTests {
         harness.appState.recentlyClosedPRs = [.fixture(number: 2)]
         harness.appState.lastUpdated = Date()
         harness.appState.isLoading = false
-        harness.appState.error = .networkError
-        harness.appState.isRateLimited = true
-        harness.appState.rateLimitResetDate = Date().addingTimeInterval(60)
+        harness.appState.error = .rateLimitExceeded(resetAt: Date().addingTimeInterval(60))
         harness.appState.isStale = true
         harness.appState.authenticationStatus = .authenticated(username: "octocat")
 

@@ -149,7 +149,6 @@ final class PollingEngine: PollingControlling {
             appState.lastUpdated = Date()
             if appState.isLoading { appState.isLoading = false }
             if appState.error != nil { appState.error = nil }
-            if appState.isRateLimited { appState.isRateLimited = false }
 
             previousPRs = newPRs
             consecutiveFailures = 0
@@ -164,8 +163,6 @@ final class PollingEngine: PollingControlling {
             return .stopLoop
 
         } catch AppError.rateLimitExceeded(let resetAt) {
-            appState.isRateLimited = true
-            appState.rateLimitResetDate = resetAt
             appState.error = .rateLimitExceeded(resetAt: resetAt)
             appState.isLoading = false
 
@@ -173,7 +170,7 @@ final class PollingEngine: PollingControlling {
             stop()
             pollingTask = Task {
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                appState.isRateLimited = false
+                appState.error = nil
                 await runLoop()
             }
             return .stopLoop

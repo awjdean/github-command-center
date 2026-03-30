@@ -11,15 +11,25 @@ protocol PollingControlling: AnyObject {
 
 @MainActor
 final class AppState: ObservableObject {
-    @Published var prs: [PRState] = []
+    @Published var prs: [PRState] = [] {
+        didSet {
+            recomputePRCaches()
+        }
+    }
     @Published var recentlyClosedPRs: [PRState] = []  // Shown for one poll cycle
     @Published var lastUpdated: Date?
-    @Published var isLoading = true  // True on first launch before any fetch
+    @Published var isLoading = true
     @Published var error: AppError?
-    @Published var isRateLimited = false
-    @Published var rateLimitResetDate: Date?
-    @Published var isStale = false  // True if last update was >5 min ago
+    @Published var isStale = false
     @Published var authenticationStatus: AuthStatus = .unknown
+
+    var isRateLimited: Bool {
+        if case .rateLimitExceeded = error { return true } else { return false }
+    }
+
+    var rateLimitResetDate: Date? {
+        if case .rateLimitExceeded(let date) = error { return date } else { return nil }
+    }
 
     enum AuthStatus {
         case unknown
@@ -44,13 +54,11 @@ final class AppState: ObservableObject {
     // MARK: - Triage-sorted PR lists
 
     var needsActionPRs: [PRState] {
-        prs.filter { $0.triageCategory == .needsYourAction }
-            .sorted(by: PRState.compareForNeedsAction)
+        cachedNeedsActionPRs
     }
 
     var waitingOnOthersPRs: [PRState] {
-        prs.filter { $0.triageCategory == .waitingOnOthers }
-            .sorted { $0.updatedAt > $1.updatedAt }
+        cachedWaitingOnOthersPRs
     }
 
     var healthStatus: HealthStatus {
@@ -87,6 +95,8 @@ final class AppState: ObservableObject {
     private var pollingEngine: (any PollingControlling)?
     private let makePollingEngine: (AppState) -> any PollingControlling
     private let requestNotificationPermission: () async -> Void
+    private var cachedNeedsActionPRs: [PRState] = []
+    private var cachedWaitingOnOthersPRs: [PRState] = []
 
     init() {
         self.makePollingEngine = { PollingEngine(appState: $0) }
@@ -107,10 +117,19 @@ final class AppState: ObservableObject {
         lastUpdated = nil
         isLoading = true
         error = nil
-        isRateLimited = false
-        rateLimitResetDate = nil
         isStale = false
         authenticationStatus = .unknown
+    }
+
+    private func recomputePRCaches() {
+        cachedNeedsActionPRs =
+            prs
+            .filter { $0.triageCategory == .needsYourAction }
+            .sorted(by: PRState.compareForNeedsAction)
+        cachedWaitingOnOthersPRs =
+            prs
+            .filter { $0.triageCategory == .waitingOnOthers }
+            .sorted { $0.updatedAt > $1.updatedAt }
     }
 
     func startPollingIfNeeded() {
@@ -139,7 +158,6 @@ final class AppState: ObservableObject {
         clearPublishedSessionState()
     }
 
-    // Called by PollingEngine when token changes in Settings
     func resetPolling() {
         pollingEngine?.reset()
         pollingEngine?.stop()
