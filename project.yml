@@ -29,3 +29,19 @@ targets:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
         Release:
           SWIFT_OPTIMIZATION_LEVEL: "-O"
+
+  GitHubCommandCenterTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: GitHubCommandCenterTests
+    dependencies:
+      - target: GitHubCommandCenter
+    settings:
+      base:
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/GitHubCommandCenter.app/Contents/MacOS/GitHubCommandCenter"
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        GENERATE_INFOPLIST_FILE: YES
