@@ -36,4 +36,4 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            test 2>&1 | tail -20 || echo "No tests yet — build-only CI passing"
+            test
