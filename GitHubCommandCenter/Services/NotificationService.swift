@@ -1,9 +1,13 @@
 import Foundation
 import UserNotifications
 
-final class NotificationService: Sendable {
+final class NotificationService {
     static let shared = NotificationService()
-    private init() {}
+
+    // Injected in tests to capture fired notifications without UNUserNotificationCenter.
+    var notificationHandler: ((String, String) -> Void)?  // (title, body)
+
+    init() {}
 
     func requestPermission() async {
         _ = try? await UNUserNotificationCenter.current()
@@ -69,7 +73,11 @@ final class NotificationService: Sendable {
         }
     }
 
-    private func fire(title: String, body: String) {
+    func fire(title: String, body: String) {
+        if let handler = notificationHandler {
+            handler(title, body)
+            return
+        }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
