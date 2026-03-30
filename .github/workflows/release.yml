@@ -23,9 +23,10 @@ jobs:
 
       - name: Create .zip for distribution
         run: |
-          APP_PATH=$(find build/DerivedData -name "GitHubCommandCenter.app" -type d | head -1)
+          SEARCH_DIR="build/DerivedData"
+          APP_PATH=$(find "$SEARCH_DIR" -name "GitHubCommandCenter.app" -type d | head -1)
           if [ -z "$APP_PATH" ]; then
-            echo "App bundle not found: $APP_PATH"
+            echo "App bundle not found in $SEARCH_DIR (APP_PATH is empty)"
             exit 1
           fi
           echo "Found app at: $APP_PATH"
