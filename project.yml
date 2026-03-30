@@ -2,15 +2,15 @@ name: GitHubCommandCenter
 options:
   bundleIdPrefix: com.awjdean
   deploymentTarget:
-    macOS: "13.0"
-  xcodeVersion: "16.0"
+    macOS: "14.0"
+  xcodeVersion: "26.4"
   createIntermediateGroups: true
 
 targets:
   GitHubCommandCenter:
     type: application
     platform: macOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "14.0"
     sources:
       - path: GitHubCommandCenter
     settings:
@@ -23,7 +23,7 @@ targets:
         SWIFT_VERSION: "5.9"
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_STYLE: Automatic
-        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
       configs:
         Debug:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
@@ -33,7 +33,7 @@ targets:
   GitHubCommandCenterTests:
     type: bundle.unit-test
     platform: macOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "14.0"
     sources:
       - path: GitHubCommandCenterTests
     dependencies:
@@ -43,5 +43,5 @@ targets:
         BUNDLE_LOADER: "$(TEST_HOST)"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/GitHubCommandCenter.app/Contents/MacOS/GitHubCommandCenter"
         SWIFT_VERSION: "5.9"
-        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
         GENERATE_INFOPLIST_FILE: YES
