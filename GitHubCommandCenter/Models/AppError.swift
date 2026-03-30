@@ -1,6 +1,6 @@
 import Foundation
 
-enum AppError: LocalizedError, Sendable {
+enum AppError: LocalizedError, Sendable, Equatable {
     case authError
     case noToken
     case rateLimitExceeded(resetAt: Date)

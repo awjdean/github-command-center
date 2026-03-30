@@ -24,6 +24,14 @@ final class AppState: ObservableObject {
         case green, yellow, red
     }
 
+    enum PanelContentState: Equatable {
+        case loading
+        case setupRequired
+        case authError
+        case empty
+        case prList
+    }
+
     // MARK: - Triage-sorted PR lists
 
     var needsActionPRs: [PRState] {
@@ -47,6 +55,25 @@ final class AppState: ObservableObject {
         return needsAction.contains { $0.urgencyScore >= 3 } ? .red : .yellow
     }
 
+    var panelContentState: PanelContentState {
+        if isLoading {
+            return .loading
+        }
+
+        guard prs.isEmpty else {
+            return .prList
+        }
+
+        switch authenticationStatus {
+        case .noToken:
+            return .setupRequired
+        case .failed:
+            return .authError
+        default:
+            return .empty
+        }
+    }
+
     // MARK: - Polling lifecycle (owned by AppState to keep wiring simple)
 
     private var pollingEngine: PollingEngine?
@@ -63,20 +90,31 @@ final class AppState: ObservableObject {
         pollingEngine?.forceRefresh()
     }
 
-    // Called by PollingEngine after each successful fetch
-    func markStaleIfNeeded() {
-        guard let lastUpdated else { return }
-        isStale = Date().timeIntervalSince(lastUpdated) > 300
+    func recomputeStaleness(now: Date = Date()) {
+        guard let lastUpdated else {
+            isStale = false
+            return
+        }
+        isStale = now.timeIntervalSince(lastUpdated) > 300
+    }
+
+    func clearSessionStateForNewSession() {
+        prs = []
+        recentlyClosedPRs = []
+        lastUpdated = nil
+        isLoading = true
+        error = nil
+        isRateLimited = false
+        rateLimitResetDate = nil
+        isStale = false
+        authenticationStatus = .unknown
     }
 
     // Called by PollingEngine when token changes in Settings
     func resetPolling() {
         pollingEngine?.stop()
         pollingEngine = nil
-        authenticationStatus = .unknown
-        error = nil
-        isRateLimited = false
-        isLoading = true
+        clearSessionStateForNewSession()
         startPollingIfNeeded()
     }
 }

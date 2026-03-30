@@ -1,7 +1,6 @@
 import Foundation
 
 struct PRState: Identifiable, Equatable, Sendable {
-    let id: Int  // = number, satisfies Identifiable
     let number: Int
     let title: String
     let repoFullName: String  // "owner/repo"
@@ -48,6 +47,10 @@ struct PRState: Identifiable, Equatable, Sendable {
     }
 
     // MARK: - Computed
+
+    var id: String {
+        "\(repoFullName)#\(number)"
+    }
 
     var triageCategory: TriageCategory {
         guard draftStatus == .ready else { return .waitingOnOthers }
