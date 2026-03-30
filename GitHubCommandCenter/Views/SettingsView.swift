@@ -11,7 +11,7 @@ struct SettingsContentView: View {
     @State private var tokenInput = ""
     @State private var tokenState: TokenState = .empty
     @State private var isValidating = false
-    @State private var launchAtLogin = (SMAppService.mainApp.status == .enabled)
+    @State private var launchAtLogin = false
     let showsAppControls: Bool
 
     init(showsAppControls: Bool = true) {
@@ -347,7 +347,11 @@ struct SettingsContentView: View {
     }
 
     private func clearToken() {
-        try? KeychainService.shared.deleteToken()
+        do {
+            try KeychainService.shared.deleteToken()
+        } catch {
+            print("Failed to delete token from keychain in clearToken: \(error.localizedDescription)")
+        }
         tokenInput = ""
         withAnimation(.easeInOut(duration: 0.2)) {
             tokenState = .empty
@@ -385,7 +389,7 @@ private final class SettingsPreviewPollingController: PollingControlling {
 // MARK: - Supporting Types
 
 private struct ScopeItem: Identifiable {
-    let id = UUID()
+    var id: String { name }
     let name: String
     var isOptional: Bool = false
 }
@@ -412,17 +416,31 @@ extension View {
 private struct FlowLayout: Layout {
     var spacing: CGFloat = 4
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        arrange(in: proposal.width ?? .infinity, subviews: subviews).size
+    struct Cache {
+        var size: CGSize
+        var positions: [CGPoint]
+    }
+
+    func makeCache(subviews: Subviews) -> Cache {
+        arrange(in: .infinity, subviews: subviews)
+    }
+
+    func updateCache(_ cache: inout Cache, subviews: Subviews) {
+        cache = arrange(in: .infinity, subviews: subviews)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
+        cache = arrange(in: proposal.width ?? .infinity, subviews: subviews)
+        return cache.size
     }
 
     func placeSubviews(
         in bounds: CGRect,
         proposal: ProposedViewSize,
         subviews: Subviews,
-        cache: inout ()
+        cache: inout Cache
     ) {
-        for (index, position) in arrange(in: bounds.width, subviews: subviews).positions.enumerated() {
+        for (index, position) in cache.positions.enumerated() {
             subviews[index].place(
                 at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y),
                 proposal: .unspecified
@@ -430,28 +448,26 @@ private struct FlowLayout: Layout {
         }
     }
 
-    private func arrange(in maxWidth: CGFloat, subviews: Subviews) -> (
-        size: CGSize, positions: [CGPoint]
-    ) {
+    private func arrange(in maxWidth: CGFloat, subviews: Subviews) -> Cache {
         var positions: [CGPoint] = []
-        var x: CGFloat = 0
-        var y: CGFloat = 0
+        var currentX: CGFloat = 0
+        var currentY: CGFloat = 0
         var rowHeight: CGFloat = 0
         var totalWidth: CGFloat = 0
 
         for subview in subviews {
             let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > maxWidth, x > 0 {
-                x = 0
-                y += rowHeight + spacing
+            if currentX + size.width > maxWidth, currentX > 0 {
+                currentX = 0
+                currentY += rowHeight + spacing
                 rowHeight = 0
             }
-            positions.append(CGPoint(x: x, y: y))
+            positions.append(CGPoint(x: currentX, y: currentY))
             rowHeight = max(rowHeight, size.height)
-            x += size.width + spacing
-            totalWidth = max(totalWidth, x - spacing)
+            currentX += size.width + spacing
+            totalWidth = max(totalWidth, currentX - spacing)
         }
 
-        return (CGSize(width: totalWidth, height: y + rowHeight), positions)
+        return Cache(size: CGSize(width: totalWidth, height: currentY + rowHeight), positions: positions)
     }
 }
