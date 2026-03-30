@@ -21,6 +21,19 @@ struct PollingEngineTests {
         }
     }
 
+    private func waitUntil(
+        timeoutNanoseconds: UInt64,
+        pollIntervalNanoseconds: UInt64 = 10_000_000,
+        condition: () -> Bool
+    ) async -> Bool {
+        let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
+        while DispatchTime.now().uptimeNanoseconds < deadline {
+            if condition() { return true }
+            try? await Task.sleep(nanoseconds: pollIntervalNanoseconds)
+        }
+        return condition()
+    }
+
     @Test
     func pollInterval_fewerThan20PRs_is60s() {
         let harness = Harness()
@@ -192,6 +205,17 @@ struct PollingEngineTests {
     }
 
     @Test
+    func poll_networkError_requestsImmediateRetryAfterBackoff() async {
+        let harness = Harness()
+        harness.mockSource.validateTokenResult = .success("octocat")
+        harness.mockSource.fetchResult = .failure(AppError.networkError)
+
+        let outcome = await harness.engine.poll()
+
+        #expect(outcome == .continueImmediately)
+    }
+
+    @Test
     func poll_rateLimitExceeded_setsRateLimitState() async {
         let harness = Harness()
         let resetAt = Date().addingTimeInterval(3600)
@@ -263,8 +287,11 @@ struct PollingEngineTests {
 
         harness.engine.reset()
         harness.appState.recentlyClosedPRs = [.fixture(number: 100)]
-        try? await Task.sleep(nanoseconds: 100_000_000)
+        let recentlyClosedWasCleared = await waitUntil(timeoutNanoseconds: 300_000_000) {
+            harness.appState.recentlyClosedPRs.isEmpty
+        }
 
+        #expect(recentlyClosedWasCleared == false)
         #expect(harness.appState.recentlyClosedPRs.map(\.number) == [100])
     }
 

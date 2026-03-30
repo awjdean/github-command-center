@@ -59,6 +59,21 @@ struct NotificationServiceTests {
     }
 
     @Test
+    func notification_ciPendingToFailing_yourPR_fires() {
+        let harness = Harness()
+        let old = PRState.fixture(ciStatus: .pending, createdByMe: true)
+        let new = PRState.fixture(
+            ciStatus: .failing(failingCheckNames: ["build"], totalChecks: 1),
+            createdByMe: true
+        )
+
+        harness.service.checkTransitions(from: [old], to: [new], disappeared: [])
+
+        #expect(harness.fired.count == 1)
+        #expect(harness.fired[0].1.contains("build"))
+    }
+
+    @Test
     func notification_ciFailingToFailing_noRepeat() {
         let harness = Harness()
         let old = PRState.fixture(

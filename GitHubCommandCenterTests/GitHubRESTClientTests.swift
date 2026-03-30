@@ -5,19 +5,6 @@ import Testing
 
 @Suite(.serialized)
 struct GitHubRESTClientTests {
-    private final class Harness {
-        let session: URLSession
-
-        init() {
-            MockURLProtocol.reset()
-            session = MockURLProtocol.makeSession()
-        }
-
-        deinit {
-            MockURLProtocol.reset()
-        }
-    }
-
     @Test
     func validateToken_success_returnsUsername() async throws {
         let harness = Harness()
@@ -373,6 +360,72 @@ struct GitHubRESTClientTests {
     }
 
     @Test
+    func fetchAllPRStates_checkRuns403_fallsBackToCommitStatuses() async throws {
+        let harness = Harness()
+        stubFullPRFlow(
+            number: 1,
+            checkRunsStatusCode: 403,
+            statusState: "failure",
+            commitStatuses: [
+                [
+                    "context": "legacy-ci",
+                    "state": "failure",
+                ]
+            ]
+        )
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
+        let prs = try await client.fetchAllPRStates(username: "octocat")
+        let pr = try #require(prs.first)
+
+        if case .failing(let names, _) = pr.ciStatus {
+            #expect(names == ["legacy-ci"])
+        } else {
+            Issue.record("Expected .failing, got \(pr.ciStatus)")
+        }
+    }
+
+    @Test
+    func fetchAllPRStates_checkRuns401_stillThrowsAuthError() async {
+        let harness = Harness()
+        stubFullPRFlow(number: 1, checkRunsStatusCode: 401)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
+
+        do {
+            _ = try await client.fetchAllPRStates(username: "octocat")
+            Issue.record("Expected authError")
+        } catch let error as AppError {
+            #expect(error == .authError)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test
+    func fetchAllPRStates_failedCheckWinsOverPendingCheck() async throws {
+        let harness = Harness()
+        stubFullPRFlow(
+            number: 1,
+            checkRuns: [
+                ["name": "unit-tests", "status": "completed", "conclusion": "failure"],
+                ["name": "integration", "status": "in_progress"],
+            ]
+        )
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
+        let prs = try await client.fetchAllPRStates(username: "octocat")
+        let pr = try #require(prs.first)
+
+        if case .failing(let names, let total) = pr.ciStatus {
+            #expect(names == ["unit-tests"])
+            #expect(total == 2)
+        } else {
+            Issue.record("Expected .failing, got \(pr.ciStatus)")
+        }
+    }
+
+    @Test
     func fetchAllPRStates_pendingCheckRuns_mapsToCIPending() async throws {
         let harness = Harness()
         stubFullPRFlow(
@@ -596,6 +649,24 @@ struct GitHubRESTClientTests {
     }
 
     @Test
+    func fetchAllPRStates_dismissedReview_clearsPriorApproval() async throws {
+        let harness = Harness()
+        stubFullPRFlow(
+            number: 1,
+            reviews: [
+                ["user": ["login": "alice"], "state": "APPROVED"],
+                ["user": ["login": "alice"], "state": "DISMISSED"],
+            ]
+        )
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
+        let prs = try await client.fetchAllPRStates(username: "octocat")
+
+        let pr = try #require(prs.first)
+        #expect(pr.reviewStatus == .none)
+    }
+
+    @Test
     func fetchAllPRStates_parsesUpdatedAtWithoutFractionalSeconds() async throws {
         let harness = Harness()
         stubFullPRFlow(number: 1, updatedAt: "2026-03-30T10:00:00Z")
@@ -625,61 +696,5 @@ struct GitHubRESTClientTests {
 
         let username = try await client.validateToken()
         #expect(username == "octocat")
-    }
-
-    private func stubFullPRFlow(
-        number: Int = 42,
-        title: String = "Fix the bug",
-        owner: String = "org",
-        repo: String = "app",
-        authorLogin: String = "octocat",
-        requestedReviewers: [[String: Any]] = [],
-        assignees: [[String: Any]] = [],
-        mergeableState: String = "clean",
-        reviews: [[String: Any]] = [],
-        checkRuns: [[String: Any]] = [["name": "CI", "status": "completed", "conclusion": "success"]],
-        updatedAt: String = "2026-03-30T10:00:00.000Z",
-        statusState: String = "success",
-        commitStatuses: [[String: Any]] = []
-    ) {
-        MockURLProtocol.stub(
-            urlContains: "/search/issues",
-            json: [
-                "total_count": 1,
-                "incomplete_results": false,
-                "items": [
-                    [
-                        "number": number,
-                        "title": title,
-                        "html_url": "https://github.com/\(owner)/\(repo)/pull/\(number)",
-                        "draft": false,
-                        "updated_at": updatedAt,
-                        "repository_url": "https://api.github.com/repos/\(owner)/\(repo)",
-                    ]
-                ],
-            ]
-        )
-        MockURLProtocol.stub(urlContains: "/pulls/\(number)/reviews?per_page=100&page=1", json: reviews)
-        MockURLProtocol.stub(urlContains: "/pulls/\(number)/reviews?per_page=100&page=2", json: [])
-        MockURLProtocol.stub(urlContains: "/pulls/\(number)/reviews", json: reviews)
-        MockURLProtocol.stub(urlContains: "/check-runs", json: ["check_runs": checkRuns])
-        MockURLProtocol.stub(
-            urlContains: "/status",
-            json: [
-                "state": statusState,
-                "statuses": commitStatuses,
-            ]
-        )
-        MockURLProtocol.stub(
-            urlContains: "/pulls/\(number)",
-            json: [
-                "head": ["sha": "abc123def456"],
-                "state": "open",
-                "user": ["login": authorLogin],
-                "assignees": assignees,
-                "requested_reviewers": requestedReviewers,
-                "mergeable_state": mergeableState,
-            ]
-        )
     }
 }

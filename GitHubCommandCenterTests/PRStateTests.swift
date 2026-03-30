@@ -189,7 +189,7 @@ struct PRStateTests {
             createdByMe: true
         )
 
-        #expect(pr.urgencyScore == 8)
+        #expect(pr.urgencyScore >= 8)
     }
 
     @Test

@@ -6,6 +6,20 @@ import Testing
 
 @Suite
 struct KeychainServiceTests {
+    private enum RawTokenStoreError: LocalizedError {
+        case deleteFailed(status: OSStatus, serviceName: String)
+        case addFailed(status: OSStatus, serviceName: String)
+
+        var errorDescription: String? {
+            switch self {
+            case .deleteFailed(let status, let serviceName):
+                return "Failed to clear seeded token data for \(serviceName) (OSStatus \(status))"
+            case .addFailed(let status, let serviceName):
+                return "Failed to seed raw token data for \(serviceName) (OSStatus \(status))"
+            }
+        }
+    }
+
     @Test
     func saveAndLoad_returnsStoredToken() throws {
         let service = makeService()
@@ -112,10 +126,14 @@ struct KeychainServiceTests {
         ]
 
         let deleteStatus = SecItemDelete(query as CFDictionary)
-        #expect(deleteStatus == errSecSuccess || deleteStatus == errSecItemNotFound)
+        guard deleteStatus == errSecSuccess || deleteStatus == errSecItemNotFound else {
+            throw RawTokenStoreError.deleteFailed(status: deleteStatus, serviceName: serviceName)
+        }
 
         let addQuery = query.merging([kSecValueData: data] as [CFString: Any]) { _, new in new }
         let status = SecItemAdd(addQuery as CFDictionary, nil)
-        #expect(status == errSecSuccess)
+        guard status == errSecSuccess else {
+            throw RawTokenStoreError.addFailed(status: status, serviceName: serviceName)
+        }
     }
 }
