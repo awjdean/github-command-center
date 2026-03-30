@@ -50,7 +50,13 @@ struct SettingsView: View {
                     }
                 }
 
-                Text("Needs: **repo** (read) scope")
+                Text(
+                    "Classic PAT: **repo**. Fine-grained PAT: **Pull requests: Read**, "
+                        + "**Commit statuses: Read**, **Checks: Read**."
+                )
+                .font(.caption)
+                .foregroundColor(.secondary)
+                Text("Without **Checks: Read**, the app still loads PRs but CI detail may be reduced.")
                     .font(.caption)
                     .foregroundColor(.secondary)
 

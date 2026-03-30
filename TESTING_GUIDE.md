@@ -15,7 +15,7 @@ mise run sync
 mise run hooks:install
 ```
 
-`mise install` provisions the repo-managed tools defined in [`mise.toml`](/Users/awjdean/coding/github-command-center/mise.toml):
+`mise install` provisions the repo-managed tools defined in [`mise.toml`](mise.toml):
 
 | Tool | Purpose |
 | --- | --- |
@@ -49,7 +49,7 @@ The repo uses a two-tool setup:
 
 ### 1. `swift format`
 
-`swift format` handles formatting such as indentation, wrapping, spacing, and import ordering. Configuration lives in [`.swift-format`](/Users/awjdean/coding/github-command-center/.swift-format).
+`swift format` handles formatting such as indentation, wrapping, spacing, and import ordering. Configuration lives in [`.swift-format`](.swift-format).
 
 Key settings:
 
@@ -72,7 +72,7 @@ swift format --in-place --recursive GitHubCommandCenter GitHubCommandCenterTests
 
 ### 2. `SwiftLint`
 
-`SwiftLint` enforces policy rules such as size limits, force unwrap usage, and naming. Configuration lives in [`.swiftlint.yml`](/Users/awjdean/coding/github-command-center/.swiftlint.yml).
+`SwiftLint` enforces policy rules such as size limits, force unwrap usage, and naming. Configuration lives in [`.swiftlint.yml`](.swiftlint.yml).
 
 Formatting-overlap rules are disabled so `swift format` remains the single source of truth for code layout.
 
@@ -110,7 +110,7 @@ mise run fix-style
 
 ## Git Hooks
 
-Git hooks are managed by [`hk`](https://github.com/jdx/hk) using [`hk.pkl`](/Users/awjdean/coding/github-command-center/hk.pkl).
+Git hooks are managed by [`hk`](https://github.com/jdx/hk) using [`hk.pkl`](hk.pkl).
 
 Install hooks with:
 
@@ -156,7 +156,7 @@ mise run open
 1. Go to <https://github.com/settings/tokens> or <https://github.com/settings/tokens?type=beta>
 2. Generate either:
    - A classic token with the `repo` scope, or
-   - A fine-grained token with **Pull requests: Read** and **Commit statuses: Read**
+   - A fine-grained token with **Pull requests: Read**, **Commit statuses: Read**, and **Checks: Read**
 3. Copy the token
 
 ### 2. Launch the app
@@ -188,4 +188,5 @@ mise run open
 | Build fails with signing errors | Use the `mise run build` task, which disables code signing for local builds |
 | `GitHubCommandCenter.xcodeproj` is stale | Run `mise run sync` after changing `project.yml` |
 | Hooks do not run | Reinstall them with `mise run hooks:install` |
-| Token validation fails | Ensure the token has the required repo or fine-grained read permissions |
+| Token validation fails | Ensure the token has the required `repo` scope or the fine-grained read permissions listed above |
+| PRs load but CI detail looks incomplete | Add **Checks: Read** to the fine-grained token; without it the app falls back to commit statuses only |
