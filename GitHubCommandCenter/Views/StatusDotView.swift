@@ -20,7 +20,7 @@ struct StatusDotView: View {
             if differentiateWithoutColor {
                 Text(accessibilityLetter)
                     .font(.system(size: 6, weight: .bold))
-                    .foregroundColor(.black)
+                    .foregroundColor(accessibilityForegroundColor)
             }
         }
         .help("\(tooltipLabel): \(tooltipDetail)")
@@ -87,6 +87,32 @@ struct StatusDotView: View {
             case .conflicts: return "C"
             case .blocked: return "B"
             case .pending: return "~"
+            }
+        }
+    }
+
+    private var accessibilityForegroundColor: Color {
+        switch dimension {
+        case .ci:
+            switch pr.ciStatus {
+            case .pending:
+                return .black
+            case .passing, .failing, .none:
+                return .white
+            }
+        case .review:
+            switch pr.reviewStatus {
+            case .requested:
+                return .black
+            case .approved, .changesRequested, .none:
+                return .white
+            }
+        case .merge:
+            switch pr.mergeStatus {
+            case .blocked:
+                return .black
+            case .ready, .conflicts, .pending:
+                return .white
             }
         }
     }
