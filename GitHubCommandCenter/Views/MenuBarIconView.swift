@@ -25,3 +25,33 @@ struct MenuBarIconView: View {
         }
     }
 }
+
+#Preview("Green Empty") {
+    MenuBarIconView(healthStatus: .green, prCount: 0)
+        .padding()
+}
+
+#Preview("Green Count") {
+    MenuBarIconView(healthStatus: .green, prCount: 3)
+        .padding()
+}
+
+#Preview("Yellow Empty") {
+    MenuBarIconView(healthStatus: .yellow, prCount: 0)
+        .padding()
+}
+
+#Preview("Yellow Count") {
+    MenuBarIconView(healthStatus: .yellow, prCount: 2)
+        .padding()
+}
+
+#Preview("Red Empty") {
+    MenuBarIconView(healthStatus: .red, prCount: 0)
+        .padding()
+}
+
+#Preview("Red Count") {
+    MenuBarIconView(healthStatus: .red, prCount: 5)
+        .padding()
+}

@@ -8,6 +8,7 @@ struct SettingsView: View {
 
     enum TokenState {
         case empty
+        case unvalidated
         case valid(username: String)
         case invalid
     }
@@ -26,13 +27,13 @@ struct SettingsView: View {
                             .stroke(borderColor, lineWidth: 1.5)
                     )
                     .onChange(of: tokenInput) { _ in
-                        tokenState = tokenInput.isEmpty ? .empty : tokenState
+                        tokenState = tokenInput.isEmpty ? .empty : .unvalidated
                     }
 
                 // Status indicator
                 HStack(spacing: 6) {
                     switch tokenState {
-                    case .empty:
+                    case .empty, .unvalidated:
                         EmptyView()
                     case .valid(let username):
                         Image(systemName: "checkmark.circle.fill")
@@ -97,18 +98,25 @@ struct SettingsView: View {
 
     private var borderColor: Color {
         switch tokenState {
-        case .empty:   return .clear
-        case .valid:   return .green.opacity(0.7)
-        case .invalid: return .red.opacity(0.7)
+        case .empty, .unvalidated: return .clear
+        case .valid:               return .green.opacity(0.7)
+        case .invalid:             return .red.opacity(0.7)
         }
     }
 
     private func loadSavedToken() {
-        if let saved = try? KeychainService.shared.loadToken(), !saved.isEmpty {
-            tokenInput = saved
-            if case .authenticated(let username) = appState.authenticationStatus {
-                tokenState = .valid(username: username)
+        do {
+            if let saved = try KeychainService.shared.loadToken(), !saved.isEmpty {
+                tokenInput = saved
+                if case .authenticated(let username) = appState.authenticationStatus {
+                    tokenState = .valid(username: username)
+                } else {
+                    tokenState = .unvalidated
+                }
             }
+        } catch {
+            tokenInput = ""
+            tokenState = .invalid
         }
     }
 
@@ -116,7 +124,7 @@ struct SettingsView: View {
         guard !tokenInput.isEmpty else { return }
         isValidating = true
 
-        Task {
+        Task { @MainActor in
             do {
                 let client = GitHubRESTClient(token: tokenInput)
                 let username = try await client.validateTokenForAppAccess()

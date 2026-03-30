@@ -63,7 +63,10 @@ struct PRListView: View {
         }
         .frame(width: 360)
         .background(Color.panelBackground)
-        .onAppear { appState.startPollingIfNeeded() }
+        .onAppear {
+            launchAtLogin = (SMAppService.mainApp.status == .enabled)
+            appState.startPollingIfNeeded()
+        }
     }
 
     // MARK: - Header

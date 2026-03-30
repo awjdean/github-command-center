@@ -9,7 +9,6 @@ struct StatusDotView: View {
     let pr: PRState
 
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
-    @State private var isHovered = false
 
     var body: some View {
         ZStack {
@@ -20,22 +19,11 @@ struct StatusDotView: View {
             // Accessibility: show letter inside dot when "Differentiate without color" is on
             if differentiateWithoutColor {
                 Text(accessibilityLetter)
-                    .font(.system(size: 5, weight: .bold))
+                    .font(.system(size: 6, weight: .bold))
                     .foregroundColor(.black)
             }
         }
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
-        }
-        .overlay(alignment: .top) {
-            if isHovered {
-                TooltipView(label: tooltipLabel, detail: tooltipDetail)
-                    .offset(y: -44)
-                    .fixedSize()
-                    .transition(.opacity)
-                    .zIndex(100)
-            }
-        }
+        .help("\(tooltipLabel): \(tooltipDetail)")
     }
 
     // MARK: - Color
@@ -152,29 +140,5 @@ struct StatusDotView: View {
                 return "Checking mergeability…"
             }
         }
-    }
-}
-
-// MARK: - Tooltip popup
-
-private struct TooltipView: View {
-    let label: String
-    let detail: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.tooltipLabel)
-                .foregroundColor(.textTertiary)
-                .tracking(1)
-            Text(detail)
-                .font(.tooltipDetail)
-                .foregroundColor(.textSecondary)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(Color.panelSurface)
-        .cornerRadius(6)
-        .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 2)
     }
 }
