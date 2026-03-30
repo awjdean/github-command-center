@@ -1,0 +1,27 @@
+amends "package://github.com/jdx/hk/releases/download/v1.39.0/hk@1.39.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.39.0/hk@1.39.0#/Builtins.pkl"
+
+local linters = new Mapping<String, Step> {
+    ["swift-style"] {
+        glob = "**/*.swift"
+        check = "mise run check-style"
+        fix = "mise run fix-style && mise run check-style"
+    }
+    ["trailing-whitespace"] = Builtins.trailing_whitespace
+    ["check-merge-conflict"] = Builtins.check_merge_conflict
+}
+
+hooks {
+    ["pre-commit"] {
+        fix = true
+        stash = "git"
+        steps = linters
+    }
+    ["fix"] {
+        fix = true
+        steps = linters
+    }
+    ["check"] {
+        steps = linters
+    }
+}

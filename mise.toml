@@ -1,0 +1,86 @@
+[tools]
+swiftlint = "0.63.2"
+xcodegen = "2.45.3"
+hk = "1.39.0"
+pkl = "0.31.1"
+
+[tasks.sync]
+description = "Install all project dependencies"
+run = ["mise install", "xcodegen generate"]
+
+[tasks.open]
+description = "Open project in Xcode"
+depends = ["sync"]
+run = "open GitHubCommandCenter.xcodeproj"
+
+[tasks.build]
+description = "Build with xcodebuild"
+depends = ["sync"]
+run = """
+xcodebuild \
+  -project GitHubCommandCenter.xcodeproj \
+  -scheme GitHubCommandCenter \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  CODE_SIGN_IDENTITY="" \
+  CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+"""
+
+[tasks.build-release]
+description = "Build release app bundle for packaging"
+depends = ["sync"]
+run = """
+xcodebuild \
+  -project GitHubCommandCenter.xcodeproj \
+  -scheme GitHubCommandCenter \
+  -configuration Release \
+  -destination 'platform=macOS' \
+  -derivedDataPath build/DerivedData \
+  CODE_SIGN_IDENTITY="" \
+  CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+"""
+
+[tasks.test]
+description = "Run Swift tests with xcodebuild"
+depends = ["sync"]
+run = """
+xcodebuild \
+  -project GitHubCommandCenter.xcodeproj \
+  -scheme GitHubCommandCenter \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  CODE_SIGN_IDENTITY="" \
+  CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGNING_ALLOWED=NO \
+  test
+"""
+
+[tasks."check-style"]
+description = "Check Swift formatting + lint"
+run = [
+  "swift format lint --strict --recursive GitHubCommandCenter GitHubCommandCenterTests",
+  "swiftlint lint --strict",
+]
+
+[tasks."fix-style"]
+description = "Auto-fix Swift formatting + lint issues"
+run = [
+  "swift format --in-place --recursive GitHubCommandCenter GitHubCommandCenterTests",
+  "swiftlint lint --fix",
+]
+
+[tasks.check]
+description = "Run all checks"
+depends = ["check-style", "test"]
+
+[tasks.fix]
+description = "Fix all formatting + lint issues"
+run = ["mise run sync", "mise run fix-style"]
+
+[tasks."hooks:install"]
+description = "Install git pre-commit hooks via hk"
+run = "hk install --mise"
