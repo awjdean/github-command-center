@@ -20,15 +20,19 @@ final class KeychainService: Sendable {
             kSecAttrAccount: accountName,
         ]
 
-        let deleteStatus = SecItemDelete(query as CFDictionary)
-        if deleteStatus != errSecSuccess && deleteStatus != errSecItemNotFound {
-            throw KeychainError.saveFailed(status: deleteStatus)
+        let addQuery = query.merging([kSecValueData: data] as [CFString: Any]) { _, new in new }
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        if addStatus == errSecDuplicateItem {
+            let updateAttributes: [CFString: Any] = [kSecValueData: data]
+            let updateStatus = SecItemUpdate(query as CFDictionary, updateAttributes as CFDictionary)
+            guard updateStatus == errSecSuccess else {
+                throw KeychainError.saveFailed(status: updateStatus)
+            }
+            return
         }
 
-        let addQuery = query.merging([kSecValueData: data] as [CFString: Any]) { _, new in new }
-        let status = SecItemAdd(addQuery as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw KeychainError.saveFailed(status: status)
+        guard addStatus == errSecSuccess else {
+            throw KeychainError.saveFailed(status: addStatus)
         }
     }
 
