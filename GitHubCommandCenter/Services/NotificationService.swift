@@ -21,14 +21,15 @@ final class NotificationService {
         for new in newPRs {
             guard let old = oldByID[new.id] else { continue }
 
-            // CI: passing/none → failing (only on your PRs)
+            // CI: any non-failing state → failing (only on your PRs)
             if new.assignment.createdByMe {
-                let wasPassingOrNone: Bool
-                switch old.ciStatus {
-                case .passing, .none: wasPassingOrNone = true
-                default: wasPassingOrNone = false
+                let wasFailing: Bool
+                if case .failing = old.ciStatus {
+                    wasFailing = true
+                } else {
+                    wasFailing = false
                 }
-                if wasPassingOrNone, case .failing(let names, _) = new.ciStatus {
+                if !wasFailing, case .failing(let names, _) = new.ciStatus {
                     let check = names.first ?? "a check"
                     fire(
                         title: "CI Failing — #\(new.number)",
@@ -36,28 +37,12 @@ final class NotificationService {
                     )
                 }
 
-                // Changes requested (on your PRs)
                 if case .changesRequested(let reviewers) = new.reviewStatus {
-                    if case .changesRequested = old.reviewStatus {
-                    } else {
-                        let who = reviewers.first.map { "@\($0)" } ?? "A reviewer"
-                        fire(
-                            title: "Changes Requested — #\(new.number)",
-                            body: "\(who) requested changes on \"\(new.title)\""
-                        )
-                    }
+                    notifyChangesRequestedIfNeeded(from: old.reviewStatus, reviewers: reviewers, pr: new)
                 }
 
-                // Approved (on your PRs)
                 if case .approved(let reviewers) = new.reviewStatus {
-                    if case .approved = old.reviewStatus {
-                    } else {
-                        let who = reviewers.first.map { "@\($0)" } ?? "A reviewer"
-                        fire(
-                            title: "PR Approved — #\(new.number)",
-                            body: "\(who) approved \"\(new.title)\""
-                        )
-                    }
+                    notifyApprovalIfNeeded(from: old.reviewStatus, reviewers: reviewers, pr: new)
                 }
 
                 // Merge conflicts detected (on your PRs)
@@ -85,6 +70,34 @@ final class NotificationService {
                 body: "\"\(pr.title)\" was merged or closed"
             )
         }
+    }
+
+    private func notifyChangesRequestedIfNeeded(
+        from oldStatus: PRState.ReviewStatus,
+        reviewers: [String],
+        pr: PRState
+    ) {
+        if case .changesRequested = oldStatus { return }
+
+        let who = reviewers.first.map { "@\($0)" } ?? "A reviewer"
+        fire(
+            title: "Changes Requested — #\(pr.number)",
+            body: "\(who) requested changes on \"\(pr.title)\""
+        )
+    }
+
+    private func notifyApprovalIfNeeded(
+        from oldStatus: PRState.ReviewStatus,
+        reviewers: [String],
+        pr: PRState
+    ) {
+        if case .approved = oldStatus { return }
+
+        let who = reviewers.first.map { "@\($0)" } ?? "A reviewer"
+        fire(
+            title: "PR Approved — #\(pr.number)",
+            body: "\(who) approved \"\(pr.title)\""
+        )
     }
 
     func fire(title: String, body: String) {
