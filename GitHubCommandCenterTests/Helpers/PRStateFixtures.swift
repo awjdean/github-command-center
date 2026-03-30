@@ -19,7 +19,7 @@ extension PRState {
             number: number,
             title: title,
             repoFullName: repoFullName,
-            url: URL(string: "https://github.com/owner/repo/pull/\(number)")!,
+            url: URL(string: "https://github.com/\(repoFullName)/pull/\(number)")!,
             headSHA: "abc123def456",
             draftStatus: draftStatus,
             ciStatus: ciStatus,

@@ -1,54 +1,68 @@
-import XCTest
+import Foundation
+import Testing
 @testable import GitHubCommandCenter
 
-final class GitHubRESTClientTests: XCTestCase {
-    var session: URLSession!
+@Suite(.serialized)
+struct GitHubRESTClientTests {
+    private final class Harness {
+        let session: URLSession
 
-    override func setUp() {
-        MockURLProtocol.reset()
-        session = MockURLProtocol.makeSession()
+        init() {
+            MockURLProtocol.reset()
+            session = MockURLProtocol.makeSession()
+        }
+
+        deinit {
+            MockURLProtocol.reset()
+        }
     }
 
-    override func tearDown() {
-        MockURLProtocol.reset()
-    }
-
-    // MARK: - validateToken
-
-    func testValidateToken_success_returnsUsername() async throws {
+    @Test
+    func validateToken_success_returnsUsername() async throws {
+        let harness = Harness()
         MockURLProtocol.stub(urlContains: "/user", json: ["login": "octocat"])
-        let client = GitHubRESTClient(token: "test-token", session: session)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let username = try await client.validateToken()
-        XCTAssertEqual(username, "octocat")
+
+        #expect(username == "octocat")
     }
 
-    func testValidateToken_401_throwsAuthError() async {
+    @Test
+    func validateToken_401_throwsAuthError() async {
+        let harness = Harness()
         MockURLProtocol.stub(urlContains: "/user", statusCode: 401)
-        let client = GitHubRESTClient(token: "bad-token", session: session)
+        let client = GitHubRESTClient(token: "bad-token", session: harness.session)
+
         do {
             _ = try await client.validateToken()
-            XCTFail("Expected authError")
-        } catch AppError.authError {
-            // expected
+            Issue.record("Expected authError")
+        } catch let error as AppError {
+            #expect(error == .authError)
         } catch {
-            XCTFail("Unexpected error: \(error)")
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
-    func testValidateToken_403_throwsAuthError() async {
+    @Test
+    func validateToken_403_throwsAuthError() async {
+        let harness = Harness()
         MockURLProtocol.stub(urlContains: "/user", statusCode: 403)
-        let client = GitHubRESTClient(token: "forbidden-token", session: session)
+        let client = GitHubRESTClient(token: "forbidden-token", session: harness.session)
+
         do {
             _ = try await client.validateToken()
-            XCTFail("Expected authError")
-        } catch AppError.authError {
-            // expected
+            Issue.record("Expected authError")
+        } catch let error as AppError {
+            #expect(error == .authError)
         } catch {
-            XCTFail("Unexpected error: \(error)")
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
-    func testValidateToken_403RateLimit_throwsRateLimitExceeded() async {
+    @Test
+    func validateToken_403RateLimit_throwsRateLimitExceeded() async {
+        let harness = Harness()
         let resetTS = Int(Date().timeIntervalSince1970) + 120
         MockURLProtocol.stub(
             urlContains: "/user",
@@ -60,58 +74,84 @@ final class GitHubRESTClientTests: XCTestCase {
             json: ["message": "API rate limit exceeded"]
         )
 
-        let client = GitHubRESTClient(token: "throttled-token", session: session)
+        let client = GitHubRESTClient(token: "throttled-token", session: harness.session)
 
         do {
             _ = try await client.validateToken()
-            XCTFail("Expected rateLimitExceeded")
+            Issue.record("Expected rateLimitExceeded")
         } catch AppError.rateLimitExceeded(let resetAt) {
-            XCTAssertGreaterThan(resetAt, Date())
+            #expect(resetAt > Date())
         } catch {
-            XCTFail("Unexpected error: \(error)")
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
-    func testValidateToken_429_throwsRateLimitExceeded() async {
+    @Test
+    func validateToken_429_throwsRateLimitExceeded() async {
+        let harness = Harness()
         let resetTS = Int(Date().timeIntervalSince1970) + 3600
-        MockURLProtocol.stub(urlContains: "/user", statusCode: 429,
-                              headers: ["X-RateLimit-Reset": "\(resetTS)"])
-        let client = GitHubRESTClient(token: "test-token", session: session)
+        MockURLProtocol.stub(
+            urlContains: "/user",
+            statusCode: 429,
+            headers: ["X-RateLimit-Reset": "\(resetTS)"]
+        )
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
+
         do {
             _ = try await client.validateToken()
-            XCTFail("Expected rateLimitExceeded")
+            Issue.record("Expected rateLimitExceeded")
         } catch AppError.rateLimitExceeded(let resetAt) {
-            XCTAssertGreaterThan(resetAt, Date())
+            #expect(resetAt > Date())
         } catch {
-            XCTFail("Unexpected error: \(error)")
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
-    func testValidateToken_500_throwsServerError() async {
+    @Test
+    func validateToken_500_throwsServerError() async {
+        let harness = Harness()
         MockURLProtocol.stub(urlContains: "/user", statusCode: 500)
-        let client = GitHubRESTClient(token: "test-token", session: session)
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
+
         do {
             _ = try await client.validateToken()
-            XCTFail("Expected serverError")
+            Issue.record("Expected serverError")
         } catch AppError.serverError(let code) {
-            XCTAssertEqual(code, 500)
+            #expect(code == 500)
         } catch {
-            XCTFail("Unexpected error: \(error)")
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
-    func testValidateTokenForAppAccess_success_returnsUsernameWhenSearchEmpty() async throws {
+    @Test
+    func validateToken_304WithoutCachedResponse_retriesWithoutETag() async throws {
+        let harness = Harness()
+        MockURLProtocol.stub(urlContains: "/user", statusCode: 304)
+        MockURLProtocol.stub(urlContains: "/user", json: ["login": "octocat"])
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
+        let username = try await client.validateToken()
+
+        #expect(username == "octocat")
+        #expect(MockURLProtocol.capturedRequests.count == 2)
+    }
+
+    @Test
+    func validateTokenForAppAccess_success_returnsUsernameWhenSearchEmpty() async throws {
+        let harness = Harness()
         MockURLProtocol.stub(urlContains: "/user", json: ["login": "octocat"])
         MockURLProtocol.stub(urlContains: "/search/issues", json: [
             "total_count": 0,
+            "incomplete_results": false,
             "items": []
         ])
 
-        let client = GitHubRESTClient(token: "test-token", session: session)
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let username = try await client.validateTokenForAppAccess()
 
-        XCTAssertEqual(username, "octocat")
-        XCTAssertTrue(
+        #expect(username == "octocat")
+        #expect(
             MockURLProtocol.capturedRequests.contains {
                 ($0.url?.absoluteString.contains("/search/issues") ?? false) &&
                 ($0.url?.absoluteString.contains("per_page=1") ?? false)
@@ -119,64 +159,85 @@ final class GitHubRESTClientTests: XCTestCase {
         )
     }
 
-    func testValidateTokenForAppAccess_search403_throwsAuthError() async {
+    @Test
+    func validateTokenForAppAccess_search403_throwsAuthError() async {
+        let harness = Harness()
         MockURLProtocol.stub(urlContains: "/user", json: ["login": "octocat"])
         MockURLProtocol.stub(urlContains: "/search/issues", statusCode: 403)
 
-        let client = GitHubRESTClient(token: "test-token", session: session)
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
 
         do {
             _ = try await client.validateTokenForAppAccess()
-            XCTFail("Expected authError")
-        } catch AppError.authError {
-            // expected
+            Issue.record("Expected authError")
+        } catch let error as AppError {
+            #expect(error == .authError)
         } catch {
-            XCTFail("Unexpected error: \(error)")
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
-    // MARK: - fetchAllPRStates — happy path
-
-    func testFetchAllPRStates_emptySearch_returnsEmptyArray() async throws {
+    @Test
+    func validateTokenForAppAccess_incompleteSearchResults_throwsIncompleteSearchResults() async {
+        let harness = Harness()
+        MockURLProtocol.stub(urlContains: "/user", json: ["login": "octocat"])
         MockURLProtocol.stub(urlContains: "/search/issues", json: [
-            "total_count": 0,
+            "total_count": 1,
+            "incomplete_results": true,
             "items": []
         ])
-        let client = GitHubRESTClient(token: "test-token", session: session)
-        let prs = try await client.fetchAllPRStates(username: "octocat")
-        XCTAssertTrue(prs.isEmpty)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
+
+        do {
+            _ = try await client.validateTokenForAppAccess()
+            Issue.record("Expected incompleteSearchResults")
+        } catch let error as AppError {
+            #expect(error == .incompleteSearchResults)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
     }
 
-    func testFetchAllPRStates_singlePR_buildsCorrectState() async throws {
-        stubFullPRFlow(
-            number: 42,
-            title: "Fix the bug",
-            owner: "org",
-            repo: "app",
-            authorLogin: "octocat",
-            requestedReviewers: [],
-            assignees: [],
-            mergeableState: "clean",
-            reviews: [],
-            checkRuns: [["name": "CI", "status": "completed", "conclusion": "success"]]
-        )
+    @Test
+    func fetchAllPRStates_emptySearch_returnsEmptyArray() async throws {
+        let harness = Harness()
+        MockURLProtocol.stub(urlContains: "/search/issues", json: [
+            "total_count": 0,
+            "incomplete_results": false,
+            "items": []
+        ])
 
-        let client = GitHubRESTClient(token: "test-token", session: session)
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
 
-        XCTAssertEqual(prs.count, 1)
-        guard let pr = prs.first else { return XCTFail() }
-        XCTAssertEqual(pr.number, 42)
-        XCTAssertEqual(pr.title, "Fix the bug")
-        XCTAssertEqual(pr.repoFullName, "org/app")
-        XCTAssertEqual(pr.assignment.createdByMe, true)
-        XCTAssertEqual(pr.ciStatus, .passing)
-        XCTAssertEqual(pr.mergeStatus, .ready)
+        #expect(prs.isEmpty)
     }
 
-    func testFetchAllPRStates_sameNumberDifferentRepos_haveDistinctIDs() async throws {
+    @Test
+    func fetchAllPRStates_singlePR_buildsCorrectState() async throws {
+        let harness = Harness()
+        stubFullPRFlow()
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
+        let prs = try await client.fetchAllPRStates(username: "octocat")
+        let pr = try #require(prs.first)
+
+        #expect(prs.count == 1)
+        #expect(pr.number == 42)
+        #expect(pr.title == "Fix the bug")
+        #expect(pr.repoFullName == "org/app")
+        #expect(pr.assignment.createdByMe)
+        #expect(pr.ciStatus == .passing)
+        #expect(pr.mergeStatus == .ready)
+    }
+
+    @Test
+    func fetchAllPRStates_sameNumberDifferentRepos_haveDistinctIDs() async throws {
+        let harness = Harness()
         MockURLProtocol.stub(urlContains: "/search/issues", json: [
             "total_count": 2,
+            "incomplete_results": false,
             "items": [
                 [
                     "number": 42,
@@ -199,7 +260,10 @@ final class GitHubRESTClientTests: XCTestCase {
 
         for repo in ["one", "two"] {
             MockURLProtocol.stub(urlContains: "/repos/org/\(repo)/pulls/42/reviews", json: [])
-            MockURLProtocol.stub(urlContains: "/repos/org/\(repo)/commits/abc123def456/check-runs", json: ["check_runs": []])
+            MockURLProtocol.stub(
+                urlContains: "/repos/org/\(repo)/commits/abc123def456/check-runs",
+                json: ["check_runs": []]
+            )
             MockURLProtocol.stub(urlContains: "/repos/org/\(repo)/commits/abc123def456/status", json: [
                 "state": "success",
                 "statuses": []
@@ -214,83 +278,109 @@ final class GitHubRESTClientTests: XCTestCase {
             ])
         }
 
-        let client = GitHubRESTClient(token: "test-token", session: session)
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
 
-        XCTAssertEqual(prs.count, 2)
-        XCTAssertEqual(Set(prs.map(\.id)).count, 2)
+        #expect(prs.count == 2)
+        #expect(Set(prs.map(\.id)).count == 2)
     }
 
-    func testFetchAllPRStates_unknownMergeableState_mapsToPending() async throws {
-        stubFullPRFlow(
-            number: 1,
-            mergeableState: "future_unknown_value"
-        )
-        let client = GitHubRESTClient(token: "test-token", session: session)
+    @Test
+    func fetchAllPRStates_unknownMergeableState_mapsToPending() async throws {
+        let harness = Harness()
+        stubFullPRFlow(number: 1, mergeableState: "future_unknown_value")
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
-        XCTAssertEqual(prs.first?.mergeStatus, .pending)
+
+        #expect(prs.first?.mergeStatus == .pending)
     }
 
-    func testFetchAllPRStates_dirtyMergeableState_mapsToConflicts() async throws {
+    @Test
+    func fetchAllPRStates_dirtyMergeableState_mapsToConflicts() async throws {
+        let harness = Harness()
         stubFullPRFlow(number: 1, mergeableState: "dirty")
-        let client = GitHubRESTClient(token: "test-token", session: session)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
-        XCTAssertEqual(prs.first?.mergeStatus, .conflicts)
+
+        #expect(prs.first?.mergeStatus == .conflicts)
     }
 
-    func testFetchAllPRStates_blockedMergeableState_mapsToBlocked() async throws {
+    @Test
+    func fetchAllPRStates_blockedMergeableState_mapsToBlocked() async throws {
+        let harness = Harness()
         stubFullPRFlow(number: 1, mergeableState: "blocked")
-        let client = GitHubRESTClient(token: "test-token", session: session)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
-        XCTAssertEqual(prs.first?.mergeStatus, .blocked)
+
+        #expect(prs.first?.mergeStatus == .blocked)
     }
 
-    func testFetchAllPRStates_unstableMergeableState_mapsToReady() async throws {
-        // "unstable" = mergeable despite failing optional checks; CI tracked via check-runs
+    @Test
+    func fetchAllPRStates_unstableMergeableState_mapsToReady() async throws {
+        let harness = Harness()
         stubFullPRFlow(number: 1, mergeableState: "unstable")
-        let client = GitHubRESTClient(token: "test-token", session: session)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
-        XCTAssertEqual(prs.first?.mergeStatus, .ready)
+
+        #expect(prs.first?.mergeStatus == .ready)
     }
 
-    func testFetchAllPRStates_failingCheckRuns_mapsToCIFailing() async throws {
+    @Test
+    func fetchAllPRStates_failingCheckRuns_mapsToCIFailing() async throws {
+        let harness = Harness()
         stubFullPRFlow(
             number: 1,
             mergeableState: "clean",
             checkRuns: [
                 ["name": "unit-tests", "status": "completed", "conclusion": "failure"],
-                ["name": "lint",       "status": "completed", "conclusion": "success"]
+                ["name": "lint", "status": "completed", "conclusion": "success"]
             ]
         )
-        let client = GitHubRESTClient(token: "test-token", session: session)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
-        guard let pr = prs.first else { return XCTFail() }
+        let pr = try #require(prs.first)
+
         if case .failing(let names, let total) = pr.ciStatus {
-            XCTAssertEqual(names, ["unit-tests"])
-            XCTAssertEqual(total, 2)
+            #expect(names == ["unit-tests"])
+            #expect(total == 2)
         } else {
-            XCTFail("Expected .failing, got \(pr.ciStatus)")
+            Issue.record("Expected .failing, got \(pr.ciStatus)")
         }
     }
 
-    func testFetchAllPRStates_pendingCheckRuns_mapsToCIPending() async throws {
+    @Test
+    func fetchAllPRStates_pendingCheckRuns_mapsToCIPending() async throws {
+        let harness = Harness()
         stubFullPRFlow(
             number: 1,
             checkRuns: [["name": "build", "status": "in_progress"]]
         )
-        let client = GitHubRESTClient(token: "test-token", session: session)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
-        XCTAssertEqual(prs.first?.ciStatus, .pending)
+
+        #expect(prs.first?.ciStatus == .pending)
     }
 
-    func testFetchAllPRStates_noCheckRuns_mapsToCINone() async throws {
+    @Test
+    func fetchAllPRStates_noCheckRuns_mapsToCINone() async throws {
+        let harness = Harness()
         stubFullPRFlow(number: 1, checkRuns: [])
-        let client = GitHubRESTClient(token: "test-token", session: session)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
-        XCTAssertEqual(prs.first?.ciStatus, PRState.CIStatus.none)
+
+        #expect(prs.first?.ciStatus == PRState.CIStatus.none)
     }
 
-    func testFetchAllPRStates_commitStatusFailureWithoutCheckRuns_mapsToCIFailing() async throws {
+    @Test
+    func fetchAllPRStates_commitStatusFailureWithoutCheckRuns_mapsToCIFailing() async throws {
+        let harness = Harness()
         stubFullPRFlow(
             number: 1,
             checkRuns: [],
@@ -301,95 +391,116 @@ final class GitHubRESTClientTests: XCTestCase {
             ]]
         )
 
-        let client = GitHubRESTClient(token: "test-token", session: session)
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
+        let pr = try #require(prs.first)
 
-        guard let pr = prs.first else { return XCTFail() }
         if case .failing(let names, _) = pr.ciStatus {
-            XCTAssertEqual(names, ["legacy-ci"])
+            #expect(names == ["legacy-ci"])
         } else {
-            XCTFail("Expected .failing, got \(pr.ciStatus)")
+            Issue.record("Expected .failing, got \(pr.ciStatus)")
         }
     }
 
-    func testFetchAllPRStates_reviewsApproved_mapsToApproved() async throws {
+    @Test
+    func fetchAllPRStates_reviewsApproved_mapsToApproved() async throws {
+        let harness = Harness()
         stubFullPRFlow(
             number: 1,
             reviews: [["user": ["login": "alice"], "state": "APPROVED"]]
         )
-        let client = GitHubRESTClient(token: "test-token", session: session)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
+
         if case .approved(let by) = prs.first?.reviewStatus {
-            XCTAssertEqual(by, ["alice"])
+            #expect(by == ["alice"])
         } else {
-            XCTFail("Expected .approved, got \(String(describing: prs.first?.reviewStatus))")
+            Issue.record("Expected .approved, got \(String(describing: prs.first?.reviewStatus))")
         }
     }
 
-    func testFetchAllPRStates_reviewChangesRequested_mapsToChangesRequested() async throws {
+    @Test
+    func fetchAllPRStates_reviewChangesRequested_mapsToChangesRequested() async throws {
+        let harness = Harness()
         stubFullPRFlow(
             number: 1,
             reviews: [["user": ["login": "bob"], "state": "CHANGES_REQUESTED"]]
         )
-        let client = GitHubRESTClient(token: "test-token", session: session)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
+
         if case .changesRequested(let by) = prs.first?.reviewStatus {
-            XCTAssertEqual(by, ["bob"])
+            #expect(by == ["bob"])
         } else {
-            XCTFail("Expected .changesRequested")
+            Issue.record("Expected .changesRequested")
         }
     }
 
-    func testFetchAllPRStates_requestedReviewers_mapsToRequested() async throws {
+    @Test
+    func fetchAllPRStates_requestedReviewers_mapsToRequested() async throws {
+        let harness = Harness()
         stubFullPRFlow(
             number: 1,
             requestedReviewers: [["login": "carol"]],
             reviews: []
         )
-        let client = GitHubRESTClient(token: "test-token", session: session)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
+
         if case .requested(let by) = prs.first?.reviewStatus {
-            XCTAssertEqual(by, ["carol"])
+            #expect(by == ["carol"])
         } else {
-            XCTFail("Expected .requested, got \(String(describing: prs.first?.reviewStatus))")
+            Issue.record("Expected .requested, got \(String(describing: prs.first?.reviewStatus))")
         }
     }
 
-    func testFetchAllPRStates_requestedReviewers_overridePriorApproval() async throws {
+    @Test
+    func fetchAllPRStates_requestedReviewers_overridePriorApproval() async throws {
+        let harness = Harness()
         stubFullPRFlow(
             number: 1,
             requestedReviewers: [["login": "carol"]],
             reviews: [["user": ["login": "alice"], "state": "APPROVED"]]
         )
-        let client = GitHubRESTClient(token: "test-token", session: session)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
 
         if case .requested(let by) = prs.first?.reviewStatus {
-            XCTAssertEqual(by, ["carol"])
+            #expect(by == ["carol"])
         } else {
-            XCTFail("Expected .requested when new reviewers are still outstanding")
+            Issue.record("Expected .requested when new reviewers are still outstanding")
         }
     }
 
-    func testFetchAllPRStates_changesRequested_overrideRequestedReviewers() async throws {
+    @Test
+    func fetchAllPRStates_changesRequested_overrideRequestedReviewers() async throws {
+        let harness = Harness()
         stubFullPRFlow(
             number: 1,
             requestedReviewers: [["login": "carol"]],
             reviews: [["user": ["login": "alice"], "state": "CHANGES_REQUESTED"]]
         )
-        let client = GitHubRESTClient(token: "test-token", session: session)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
 
         if case .changesRequested(let by) = prs.first?.reviewStatus {
-            XCTAssertEqual(by, ["alice"])
+            #expect(by == ["alice"])
         } else {
-            XCTFail("Expected .changesRequested to keep highest precedence")
+            Issue.record("Expected .changesRequested to keep highest precedence")
         }
     }
 
-    func testFetchAllPRStates_paginatedReviews_useLatestPage() async throws {
+    @Test
+    func fetchAllPRStates_paginatedReviews_useLatestPage() async throws {
+        let harness = Harness()
         MockURLProtocol.stub(urlContains: "/search/issues", json: [
             "total_count": 1,
+            "incomplete_results": false,
             "items": [[
                 "number": 1,
                 "title": "Test PR",
@@ -399,10 +510,13 @@ final class GitHubRESTClientTests: XCTestCase {
                 "repository_url": "https://api.github.com/repos/owner/repo"
             ]]
         ])
-        MockURLProtocol.stub(urlContains: "/pulls/1/reviews?per_page=100&page=1", json: Array(repeating: [
-            "user": ["login": "alice"],
-            "state": "APPROVED"
-        ], count: 100))
+        MockURLProtocol.stub(
+            urlContains: "/pulls/1/reviews?per_page=100&page=1",
+            json: Array(repeating: [
+                "user": ["login": "alice"],
+                "state": "APPROVED"
+            ], count: 100)
+        )
         MockURLProtocol.stub(urlContains: "/pulls/1/reviews?per_page=100&page=2", json: [[
             "user": ["login": "alice"],
             "state": "CHANGES_REQUESTED"
@@ -425,51 +539,53 @@ final class GitHubRESTClientTests: XCTestCase {
             "mergeable_state": "clean"
         ])
 
-        let client = GitHubRESTClient(token: "test-token", session: session)
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
 
         if case .changesRequested(let by) = prs.first?.reviewStatus {
-            XCTAssertEqual(by, ["alice"])
+            #expect(by == ["alice"])
         } else {
-            XCTFail("Expected .changesRequested from later review page")
+            Issue.record("Expected .changesRequested from later review page")
         }
     }
 
-    func testFetchAllPRStates_parsesUpdatedAtWithoutFractionalSeconds() async throws {
+    @Test
+    func fetchAllPRStates_parsesUpdatedAtWithoutFractionalSeconds() async throws {
+        let harness = Harness()
         stubFullPRFlow(number: 1, updatedAt: "2026-03-30T10:00:00Z")
-        let client = GitHubRESTClient(token: "test-token", session: session)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
 
-        XCTAssertEqual(
-            prs.first?.updatedAt,
-            ISO8601DateFormatter().date(from: "2026-03-30T10:00:00Z")
+        #expect(
+            prs.first?.updatedAt == ISO8601DateFormatter().date(from: "2026-03-30T10:00:00Z")
         )
     }
 
-    func testFetchAllPRStates_etag304_returnsCachedData() async throws {
-        // First request — prime the cache
-        MockURLProtocol.stub(urlContains: "/user",
-                              headers: ["ETag": "\"abc\""],
-                              json: ["login": "octocat"])
-        let client = GitHubRESTClient(token: "test-token", session: session)
+    @Test
+    func fetchAllPRStates_etag304_returnsCachedData() async throws {
+        let harness = Harness()
+        MockURLProtocol.stub(
+            urlContains: "/user",
+            headers: ["ETag": "\"abc\""],
+            json: ["login": "octocat"]
+        )
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
         _ = try await client.validateToken()
 
-        // Second request — server returns 304
         MockURLProtocol.reset()
         MockURLProtocol.stub(urlContains: "/user", statusCode: 304)
-        session = MockURLProtocol.makeSession()
-        // Re-use same client instance (holds ETag cache)
+
         let username = try await client.validateToken()
-        XCTAssertEqual(username, "octocat")
+        #expect(username == "octocat")
     }
 
-    // MARK: - Helpers
-
     private func stubFullPRFlow(
-        number: Int = 1,
-        title: String = "Test PR",
-        owner: String = "owner",
-        repo: String = "repo",
+        number: Int = 42,
+        title: String = "Fix the bug",
+        owner: String = "org",
+        repo: String = "app",
         authorLogin: String = "octocat",
         requestedReviewers: [[String: Any]] = [],
         assignees: [[String: Any]] = [],
@@ -480,10 +596,9 @@ final class GitHubRESTClientTests: XCTestCase {
         statusState: String = "success",
         commitStatuses: [[String: Any]] = []
     ) {
-        // Register more-specific patterns first so they win over prefix matches.
-        // Search
         MockURLProtocol.stub(urlContains: "/search/issues", json: [
             "total_count": 1,
+            "incomplete_results": false,
             "items": [[
                 "number": number,
                 "title": title,
@@ -493,17 +608,14 @@ final class GitHubRESTClientTests: XCTestCase {
                 "repository_url": "https://api.github.com/repos/\(owner)/\(repo)"
             ]]
         ])
-        // Reviews — register paginated URLs before the generic pattern so test stubs match real requests.
         MockURLProtocol.stub(urlContains: "/pulls/\(number)/reviews?per_page=100&page=1", json: reviews)
         MockURLProtocol.stub(urlContains: "/pulls/\(number)/reviews?per_page=100&page=2", json: [])
         MockURLProtocol.stub(urlContains: "/pulls/\(number)/reviews", json: reviews)
-        // Check runs
         MockURLProtocol.stub(urlContains: "/check-runs", json: ["check_runs": checkRuns])
         MockURLProtocol.stub(urlContains: "/status", json: [
             "state": statusState,
             "statuses": commitStatuses
         ])
-        // PR detail (least specific, registered last)
         MockURLProtocol.stub(urlContains: "/pulls/\(number)", json: [
             "head": ["sha": "abc123def456"],
             "state": "open",

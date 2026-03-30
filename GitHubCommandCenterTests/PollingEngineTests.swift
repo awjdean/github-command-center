@@ -1,262 +1,342 @@
-import XCTest
+import Foundation
+import Testing
 @testable import GitHubCommandCenter
 
 @MainActor
-final class PollingEngineTests: XCTestCase {
-    var appState: AppState!
-    var mockSource: MockGitHubDataSource!
-    var engine: PollingEngine!
+@Suite(.serialized)
+struct PollingEngineTests {
+    @MainActor
+    private final class Harness {
+        let appState = AppState()
+        let mockSource = MockGitHubDataSource()
+        let engine: PollingEngine
 
-    override func setUp() {
-        appState = AppState()
-        mockSource = MockGitHubDataSource()
-        engine = PollingEngine(appState: appState, dataSource: mockSource)
+        init(recentlyClosedClearDelay: TimeInterval = 5) {
+            engine = PollingEngine(
+                appState: appState,
+                dataSource: mockSource,
+                recentlyClosedClearDelay: recentlyClosedClearDelay
+            )
+        }
     }
 
-    override func tearDown() {
-        engine.stop()
+    @Test
+    func pollInterval_fewerThan20PRs_is60s() {
+        let harness = Harness()
+        harness.appState.prs = Array(repeating: .fixture(), count: 5)
+
+        #expect(harness.engine.pollInterval == 60)
     }
 
-    // MARK: - Dynamic poll interval
+    @Test
+    func pollInterval_20to39PRs_is120s() {
+        let harness = Harness()
+        harness.appState.prs = Array(repeating: .fixture(), count: 25)
 
-    func testPollInterval_fewerThan20PRs_is60s() {
-        appState.prs = Array(repeating: .fixture(), count: 5)
-        XCTAssertEqual(engine.pollInterval, 60)
+        #expect(harness.engine.pollInterval == 120)
     }
 
-    func testPollInterval_20to39PRs_is120s() {
-        appState.prs = Array(repeating: .fixture(), count: 25)
-        XCTAssertEqual(engine.pollInterval, 120)
+    @Test
+    func pollInterval_40orMorePRs_is300s() {
+        let harness = Harness()
+        harness.appState.prs = Array(repeating: .fixture(), count: 50)
+
+        #expect(harness.engine.pollInterval == 300)
     }
 
-    func testPollInterval_40orMorePRs_is300s() {
-        appState.prs = Array(repeating: .fixture(), count: 50)
-        XCTAssertEqual(engine.pollInterval, 300)
+    @Test
+    func pollInterval_exactly20PRs_is120s() {
+        let harness = Harness()
+        harness.appState.prs = Array(repeating: .fixture(), count: 20)
+
+        #expect(harness.engine.pollInterval == 120)
     }
 
-    func testPollInterval_exactly20PRs_is120s() {
-        appState.prs = Array(repeating: .fixture(), count: 20)
-        XCTAssertEqual(engine.pollInterval, 120)
+    @Test
+    func pollInterval_exactly40PRs_is300s() {
+        let harness = Harness()
+        harness.appState.prs = Array(repeating: .fixture(), count: 40)
+
+        #expect(harness.engine.pollInterval == 300)
     }
 
-    func testPollInterval_exactly40PRs_is300s() {
-        appState.prs = Array(repeating: .fixture(), count: 40)
-        XCTAssertEqual(engine.pollInterval, 300)
-    }
-
-    // MARK: - Successful poll
-
-    func testPoll_updatesAppStatePRs() async {
+    @Test
+    func poll_updatesAppStatePRs() async {
+        let harness = Harness()
         let pr = PRState.fixture(number: 1)
-        mockSource.validateTokenResult = .success("octocat")
-        mockSource.fetchResult = .success([pr])
+        harness.mockSource.validateTokenResult = .success("octocat")
+        harness.mockSource.fetchResult = .success([pr])
 
-        await engine.poll()
+        await harness.engine.poll()
 
-        XCTAssertEqual(appState.prs.count, 1)
-        XCTAssertEqual(appState.prs.first?.number, 1)
+        #expect(harness.appState.prs.count == 1)
+        #expect(harness.appState.prs.first?.number == 1)
     }
 
-    func testPoll_setsLastUpdated() async {
-        mockSource.fetchResult = .success([.fixture()])
-        XCTAssertNil(appState.lastUpdated)
-        await engine.poll()
-        XCTAssertNotNil(appState.lastUpdated)
+    @Test
+    func poll_setsLastUpdated() async {
+        let harness = Harness()
+        harness.mockSource.fetchResult = .success([.fixture()])
+
+        #expect(harness.appState.lastUpdated == nil)
+        await harness.engine.poll()
+        #expect(harness.appState.lastUpdated != nil)
     }
 
-    func testPoll_clearsError_onSuccess() async {
-        appState.error = .networkError
-        mockSource.fetchResult = .success([])
-        await engine.poll()
-        XCTAssertNil(appState.error)
+    @Test
+    func poll_clearsError_onSuccess() async {
+        let harness = Harness()
+        harness.appState.error = .networkError
+        harness.mockSource.fetchResult = .success([])
+
+        await harness.engine.poll()
+
+        #expect(harness.appState.error == nil)
     }
 
-    func testPoll_setsIsLoading_falseAfterSuccess() async {
-        appState.isLoading = true
-        mockSource.fetchResult = .success([])
-        await engine.poll()
-        XCTAssertFalse(appState.isLoading)
+    @Test
+    func poll_setsIsLoading_falseAfterSuccess() async {
+        let harness = Harness()
+        harness.appState.isLoading = true
+        harness.mockSource.fetchResult = .success([])
+
+        await harness.engine.poll()
+
+        #expect(harness.appState.isLoading == false)
     }
 
-    // MARK: - First poll — no notifications
-
-    func testPoll_firstPoll_doesNotFireNotifications() async {
+    @Test
+    func poll_firstPoll_doesNotFireNotifications() async {
+        let harness = Harness()
         var firedCount = 0
-        // Override shared notification service handler for this test
         NotificationService.shared.notificationHandler = { _, _ in firedCount += 1 }
         defer { NotificationService.shared.notificationHandler = nil }
 
-        // PR with lots of state changes — but since previousPRs is empty, no notifications
         let pr = PRState.fixture(
             ciStatus: .failing(failingCheckNames: ["test"], totalChecks: 1),
             reviewStatus: .changesRequested(by: ["alice"]),
             createdByMe: true
         )
-        mockSource.fetchResult = .success([pr])
-        await engine.poll()
-        XCTAssertEqual(firedCount, 0)
+        harness.mockSource.fetchResult = .success([pr])
+
+        await harness.engine.poll()
+
+        #expect(firedCount == 0)
     }
 
-    // MARK: - State change detection
-
-    func testPoll_PRDisappears_addedToRecentlyClosed() async {
+    @Test
+    func poll_PRDisappears_addedToRecentlyClosed() async {
+        let harness = Harness()
         let pr = PRState.fixture(number: 99)
-        mockSource.resolvedDisappearedPRs = [pr]
-        mockSource.fetchResult = .success([pr])
-        await engine.poll()  // establishes baseline
+        harness.mockSource.resolvedDisappearedPRs = [pr]
+        harness.mockSource.fetchResult = .success([pr])
+        await harness.engine.poll()
 
-        mockSource.fetchResult = .success([])
-        await engine.poll()  // PR disappears
-        XCTAssertEqual(appState.recentlyClosedPRs.count, 1)
-        XCTAssertEqual(appState.recentlyClosedPRs.first?.number, 99)
+        harness.mockSource.fetchResult = .success([])
+        await harness.engine.poll()
+
+        #expect(harness.appState.recentlyClosedPRs.count == 1)
+        #expect(harness.appState.recentlyClosedPRs.first?.number == 99)
     }
 
-    func testPoll_PRDisappears_withoutConfirmedClosure_notMarkedRecentlyClosed() async {
+    @Test
+    func poll_PRDisappears_withoutConfirmedClosure_notMarkedRecentlyClosed() async {
+        let harness = Harness()
         let pr = PRState.fixture(number: 99)
-        mockSource.fetchResult = .success([pr])
-        await engine.poll()  // establishes baseline
+        harness.mockSource.fetchResult = .success([pr])
+        await harness.engine.poll()
 
-        mockSource.resolvedDisappearedPRs = []
-        mockSource.fetchResult = .success([])
-        await engine.poll()
+        harness.mockSource.resolvedDisappearedPRs = []
+        harness.mockSource.fetchResult = .success([])
+        await harness.engine.poll()
 
-        XCTAssertTrue(appState.recentlyClosedPRs.isEmpty)
+        #expect(harness.appState.recentlyClosedPRs.isEmpty)
     }
 
-    func testPoll_consecutiveSuccesses_resetsFailureCount() async {
-        // Simulate a prior failure then success
-        mockSource.fetchResult = .failure(AppError.networkError)
-        await engine.poll()
+    @Test
+    func poll_consecutiveSuccesses_resetsFailureCount() async {
+        let harness = Harness()
+        harness.mockSource.fetchResult = .failure(AppError.networkError)
+        await harness.engine.poll()
 
-        mockSource.fetchResult = .success([])
-        await engine.poll()
+        harness.mockSource.fetchResult = .success([])
+        await harness.engine.poll()
 
-        // consecutiveFailures is private, but we can verify error is cleared
-        XCTAssertNil(appState.error)
+        #expect(harness.appState.error == nil)
     }
 
-    // MARK: - Error handling
+    @Test
+    func poll_authError_stopsPollingAndSetsStatus() async {
+        let harness = Harness()
+        harness.mockSource.validateTokenResult = .failure(AppError.authError)
 
-    func testPoll_authError_stopsPollingAndSetsStatus() async {
-        mockSource.validateTokenResult = .failure(AppError.authError)
-        await engine.poll()
+        await harness.engine.poll()
 
-        if case .failed = appState.authenticationStatus {} else {
-            XCTFail("Expected .failed, got \(appState.authenticationStatus)")
+        if case .failed = harness.appState.authenticationStatus {
+        } else {
+            Issue.record("Expected .failed, got \(harness.appState.authenticationStatus)")
         }
-        XCTAssertEqual(appState.error, .authError)
+        #expect(harness.appState.error == .authError)
     }
 
-    func testPoll_networkError_setsNetworkError() async {
-        mockSource.validateTokenResult = .success("octocat")
-        mockSource.fetchResult = .failure(AppError.networkError)
-        await engine.poll()
-        XCTAssertEqual(appState.error, .networkError)
+    @Test
+    func poll_networkError_setsNetworkError() async {
+        let harness = Harness()
+        harness.mockSource.validateTokenResult = .success("octocat")
+        harness.mockSource.fetchResult = .failure(AppError.networkError)
+
+        await harness.engine.poll()
+
+        #expect(harness.appState.error == .networkError)
     }
 
-    func testPoll_rateLimitExceeded_setsRateLimitState() async {
+    @Test
+    func poll_rateLimitExceeded_setsRateLimitState() async {
+        let harness = Harness()
         let resetAt = Date().addingTimeInterval(3600)
-        mockSource.validateTokenResult = .success("octocat")
-        mockSource.fetchResult = .failure(AppError.rateLimitExceeded(resetAt: resetAt))
-        await engine.poll()
+        harness.mockSource.validateTokenResult = .success("octocat")
+        harness.mockSource.fetchResult = .failure(AppError.rateLimitExceeded(resetAt: resetAt))
 
-        XCTAssertTrue(appState.isRateLimited)
-        if case .rateLimitExceeded = appState.error {} else {
-            XCTFail("Expected rateLimitExceeded error")
-        }
-    }
+        await harness.engine.poll()
 
-    // MARK: - Authentication status
-
-    func testPoll_setsAuthenticatedStatus_onFirstSuccess() async {
-        mockSource.validateTokenResult = .success("octocat")
-        mockSource.fetchResult = .success([])
-        await engine.poll()
-
-        if case .authenticated(let username) = appState.authenticationStatus {
-            XCTAssertEqual(username, "octocat")
+        #expect(harness.appState.isRateLimited)
+        if case .rateLimitExceeded = harness.appState.error {
         } else {
-            XCTFail("Expected .authenticated, got \(appState.authenticationStatus)")
+            Issue.record("Expected rateLimitExceeded error")
         }
     }
 
-    func testPoll_reusesUsername_doesNotRevalidateToken() async {
-        // Set already-authenticated status
-        appState.authenticationStatus = .authenticated(username: "octocat")
-        mockSource.fetchResult = .success([])
+    @Test
+    func poll_setsAuthenticatedStatus_onFirstSuccess() async {
+        let harness = Harness()
+        harness.mockSource.validateTokenResult = .success("octocat")
+        harness.mockSource.fetchResult = .success([])
 
-        await engine.poll()
+        await harness.engine.poll()
 
-        // validateToken should NOT have been called (we already have username)
-        // We can verify by checking that fetchCallCount > 0 but validateToken wasn't retried
-        XCTAssertGreaterThan(mockSource.fetchCallCount, 0)
-    }
-
-    // MARK: - AppState session reset and panel state
-
-    func testClearSessionStateForNewSession_clearsSessionScopedData() {
-        appState.prs = [.fixture(number: 1)]
-        appState.recentlyClosedPRs = [.fixture(number: 2)]
-        appState.lastUpdated = Date()
-        appState.isLoading = false
-        appState.error = .networkError
-        appState.isRateLimited = true
-        appState.rateLimitResetDate = Date().addingTimeInterval(60)
-        appState.isStale = true
-        appState.authenticationStatus = .authenticated(username: "octocat")
-
-        appState.clearSessionStateForNewSession()
-
-        XCTAssertTrue(appState.prs.isEmpty)
-        XCTAssertTrue(appState.recentlyClosedPRs.isEmpty)
-        XCTAssertNil(appState.lastUpdated)
-        XCTAssertNil(appState.error)
-        XCTAssertFalse(appState.isRateLimited)
-        XCTAssertNil(appState.rateLimitResetDate)
-        XCTAssertFalse(appState.isStale)
-        XCTAssertTrue(appState.isLoading)
-
-        if case .unknown = appState.authenticationStatus {
-            // expected
+        if case .authenticated(let username) = harness.appState.authenticationStatus {
+            #expect(username == "octocat")
         } else {
-            XCTFail("Expected authentication status to reset to unknown")
+            Issue.record("Expected .authenticated, got \(harness.appState.authenticationStatus)")
         }
     }
 
-    func testPanelContentState_noTokenWithNoPRs_prefersSetupState() {
-        appState.isLoading = false
-        appState.authenticationStatus = .noToken
+    @Test
+    func poll_reusesUsername_doesNotRevalidateToken() async {
+        let harness = Harness()
+        harness.appState.authenticationStatus = .authenticated(username: "octocat")
+        harness.mockSource.fetchResult = .success([])
 
-        XCTAssertEqual(appState.panelContentState, .setupRequired)
+        await harness.engine.poll()
+
+        #expect(harness.mockSource.fetchCallCount > 0)
+        #expect(harness.mockSource.validateTokenCallCount == 0)
     }
 
-    func testPanelContentState_authFailureWithNoPRs_prefersAuthErrorState() {
-        appState.isLoading = false
-        appState.authenticationStatus = .failed
+    @Test
+    func reset_clearsPreviousPRsBeforeNextPoll() async {
+        let harness = Harness()
+        let pr = PRState.fixture(number: 99)
+        harness.mockSource.fetchResult = .success([pr])
+        await harness.engine.poll()
 
-        XCTAssertEqual(appState.panelContentState, .authError)
+        harness.engine.reset()
+        harness.mockSource.resolvedDisappearedPRs = [pr]
+        harness.mockSource.fetchResult = .success([])
+        await harness.engine.poll()
+
+        #expect(harness.mockSource.lastResolvedDisappearedInput.isEmpty)
     }
 
-    // MARK: - Staleness
+    @Test
+    func reset_cancelsRecentlyClosedClearTask() async {
+        let harness = Harness(recentlyClosedClearDelay: 0.05)
+        let pr = PRState.fixture(number: 99)
+        harness.mockSource.fetchResult = .success([pr])
+        await harness.engine.poll()
 
-    func testPoll_networkError_withOldLastUpdated_marksStateStale() async {
-        appState.lastUpdated = Date().addingTimeInterval(-301)
-        mockSource.validateTokenResult = .success("octocat")
-        mockSource.fetchResult = .failure(AppError.networkError)
+        harness.mockSource.resolvedDisappearedPRs = [pr]
+        harness.mockSource.fetchResult = .success([])
+        await harness.engine.poll()
+        #expect(harness.appState.recentlyClosedPRs.map(\.number) == [99])
 
-        await engine.poll()
+        harness.engine.reset()
+        harness.appState.recentlyClosedPRs = [.fixture(number: 100)]
+        try? await Task.sleep(nanoseconds: 100_000_000)
 
-        XCTAssertTrue(appState.isStale)
+        #expect(harness.appState.recentlyClosedPRs.map(\.number) == [100])
     }
 
-    func testPoll_success_clearsExistingStaleState() async {
-        appState.lastUpdated = Date().addingTimeInterval(-301)
-        appState.isStale = true
-        mockSource.validateTokenResult = .success("octocat")
-        mockSource.fetchResult = .success([.fixture()])
+    @Test
+    func clearSessionStateForNewSession_clearsSessionScopedData() {
+        let harness = Harness()
+        harness.appState.prs = [.fixture(number: 1)]
+        harness.appState.recentlyClosedPRs = [.fixture(number: 2)]
+        harness.appState.lastUpdated = Date()
+        harness.appState.isLoading = false
+        harness.appState.error = .networkError
+        harness.appState.isRateLimited = true
+        harness.appState.rateLimitResetDate = Date().addingTimeInterval(60)
+        harness.appState.isStale = true
+        harness.appState.authenticationStatus = .authenticated(username: "octocat")
 
-        await engine.poll()
+        harness.appState.clearSessionStateForNewSession()
 
-        XCTAssertFalse(appState.isStale)
+        #expect(harness.appState.prs.isEmpty)
+        #expect(harness.appState.recentlyClosedPRs.isEmpty)
+        #expect(harness.appState.lastUpdated == nil)
+        #expect(harness.appState.error == nil)
+        #expect(harness.appState.isRateLimited == false)
+        #expect(harness.appState.rateLimitResetDate == nil)
+        #expect(harness.appState.isStale == false)
+        #expect(harness.appState.isLoading)
+
+        if case .unknown = harness.appState.authenticationStatus {
+        } else {
+            Issue.record("Expected authentication status to reset to unknown")
+        }
+    }
+
+    @Test
+    func panelContentState_noTokenWithNoPRs_prefersSetupState() {
+        let harness = Harness()
+        harness.appState.isLoading = false
+        harness.appState.authenticationStatus = .noToken
+
+        #expect(harness.appState.panelContentState == .setupRequired)
+    }
+
+    @Test
+    func panelContentState_authFailureWithNoPRs_prefersAuthErrorState() {
+        let harness = Harness()
+        harness.appState.isLoading = false
+        harness.appState.authenticationStatus = .failed
+
+        #expect(harness.appState.panelContentState == .authError)
+    }
+
+    @Test
+    func poll_networkError_withOldLastUpdated_marksStateStale() async {
+        let harness = Harness()
+        harness.appState.lastUpdated = Date().addingTimeInterval(-301)
+        harness.mockSource.validateTokenResult = .success("octocat")
+        harness.mockSource.fetchResult = .failure(AppError.networkError)
+
+        await harness.engine.poll()
+
+        #expect(harness.appState.isStale)
+    }
+
+    @Test
+    func poll_success_clearsExistingStaleState() async {
+        let harness = Harness()
+        harness.appState.lastUpdated = Date().addingTimeInterval(-301)
+        harness.appState.isStale = true
+        harness.mockSource.validateTokenResult = .success("octocat")
+        harness.mockSource.fetchResult = .success([.fixture()])
+
+        await harness.engine.poll()
+
+        #expect(harness.appState.isStale == false)
     }
 }

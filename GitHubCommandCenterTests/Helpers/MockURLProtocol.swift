@@ -3,6 +3,11 @@ import Foundation
 /// Pattern-matched URLProtocol for unit testing URLSession-based code.
 /// Register stubs before each test; call `reset()` in tearDown.
 final class MockURLProtocol: URLProtocol {
+    enum MockError: Error {
+        case missingURL
+        case invalidResponse(url: URL)
+    }
+
     struct MockResponse {
         let data: Data
         let statusCode: Int
@@ -49,23 +54,32 @@ final class MockURLProtocol: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        let urlStr = request.url?.absoluteString ?? ""
+        guard let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: MockError.missingURL)
+            return
+        }
+
+        let urlStr = url.absoluteString
         MockURLProtocol.capturedRequests.append(request)
 
-        guard let (_, mock) = MockURLProtocol.handlers.first(where: { urlStr.contains($0.urlContains) }) else {
+        guard let matchIndex = MockURLProtocol.handlers.firstIndex(where: { urlStr.contains($0.urlContains) }) else {
             client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
             return
         }
+        let mock = MockURLProtocol.handlers.remove(at: matchIndex).response
 
         var headerFields = mock.headers
         headerFields["Content-Type"] = "application/json"
 
-        let response = HTTPURLResponse(
-            url: request.url!,
+        guard let response = HTTPURLResponse(
+            url: url,
             statusCode: mock.statusCode,
             httpVersion: "HTTP/1.1",
             headerFields: headerFields
-        )!
+        ) else {
+            client?.urlProtocol(self, didFailWithError: MockError.invalidResponse(url: url))
+            return
+        }
 
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: mock.data)
