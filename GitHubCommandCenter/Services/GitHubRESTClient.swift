@@ -1,16 +1,15 @@
 import Foundation
 
 actor GitHubRESTClient: GitHubDataSource {
+    private enum RequestError: Error {
+        case app(AppError)
+        case statusCode(Int)
+    }
+
     private let token: String
     private let session: URLSession
     private var etags: [URL: String] = [:]
     private var cachedResponses: [URL: Data] = [:]
-
-    // Track both rate limit buckets independently
-    private var coreRateLimitRemaining = 5000
-    private var searchRateLimitRemaining = 30
-    private var coreRateLimitResetDate = Date()
-    private var searchRateLimitResetDate = Date()
 
     init(token: String, session: URLSession = .shared) {
         self.token = token
@@ -79,7 +78,7 @@ actor GitHubRESTClient: GitHubDataSource {
                 throw AppError.networkError
             }
             let path = "/search/issues?q=\(encoded)&per_page=\(perPage)&page=\(page)&sort=updated&order=desc"
-            let data = try await get(path, rateLimit: .search)
+            let data = try await get(path)
             let response = try decode(SearchResponse.self, from: data)
             if response.incompleteResults {
                 throw AppError.incompleteSearchResults
@@ -176,7 +175,15 @@ actor GitHubRESTClient: GitHubDataSource {
     }
 
     private func fetchCheckRuns(owner: String, repo: String, sha: String) async throws -> [CheckRun] {
-        let data = try await get("/repos/\(owner)/\(repo)/commits/\(sha)/check-runs?per_page=100")
+        let data: Data
+        do {
+            data = try await requestData("/repos/\(owner)/\(repo)/commits/\(sha)/check-runs?per_page=100")
+        } catch RequestError.statusCode(let statusCode) where statusCode == 403 || statusCode == 404 {
+            return []
+        } catch {
+            throw mapRequestError(error)
+        }
+
         let response = try decode(CheckRunsResponse.self, from: data)
         return response.checkRuns
     }
@@ -215,11 +222,6 @@ actor GitHubRESTClient: GitHubDataSource {
         let totalChecks = checkRuns.count + latestStatuses.count
         guard totalChecks > 0 else { return .none }
 
-        let hasPending = checkRuns.contains { $0.status != "completed" }
-        let hasPendingCommitStatus =
-            combinedStatusState == "pending" || latestStatuses.contains { $0.state == "pending" }
-        if hasPending || hasPendingCommitStatus { return .pending }
-
         let failingCheckRuns = checkRuns.filter { run in
             run.status == "completed" && run.conclusion != "success" && run.conclusion != "skipped"
                 && run.conclusion != "neutral"
@@ -227,14 +229,22 @@ actor GitHubRESTClient: GitHubDataSource {
         let failingCommitStatuses = latestStatuses.filter { ["error", "failure"].contains($0.state) }
 
         let failingNames = failingCheckRuns.map(\.name) + failingCommitStatuses.map(\.context)
-        if failingNames.isEmpty { return .passing }
-        return .failing(failingCheckNames: failingNames, totalChecks: totalChecks)
+        if !failingNames.isEmpty {
+            return .failing(failingCheckNames: failingNames, totalChecks: totalChecks)
+        }
+
+        let hasPending = checkRuns.contains { $0.status != "completed" }
+        let hasPendingCommitStatus =
+            combinedStatusState == "pending" || latestStatuses.contains { $0.state == "pending" }
+        if hasPending || hasPendingCommitStatus { return .pending }
+
+        return .passing
     }
 
     private func buildReviewStatus(reviews: [Review], requestedReviewers: [GitHubUser]) -> PRState.ReviewStatus {
-        // Latest review per reviewer (ignoring comment-only reviews)
+        // Latest review per reviewer. Keep DISMISSED so it clears older approvals/changes requests.
         var latestByReviewer: [String: Review] = [:]
-        for review in reviews where review.state != "COMMENTED" && review.state != "DISMISSED" {
+        for review in reviews where review.state != "COMMENTED" {
             latestByReviewer[review.user.login] = review
         }
 
@@ -287,15 +297,23 @@ actor GitHubRESTClient: GitHubDataSource {
 
     // MARK: - HTTP
 
-    private enum RateLimitBucket { case core, search }
-
     private func get(
         _ path: String,
-        rateLimit: RateLimitBucket = .core,
+        allowRetryWithoutETag: Bool = true
+    ) async throws -> Data {
+        do {
+            return try await requestData(path, allowRetryWithoutETag: allowRetryWithoutETag)
+        } catch {
+            throw mapRequestError(error)
+        }
+    }
+
+    private func requestData(
+        _ path: String,
         allowRetryWithoutETag: Bool = true
     ) async throws -> Data {
         guard let url = URL(string: "https://api.github.com\(path)") else {
-            throw AppError.networkError
+            throw RequestError.app(.networkError)
         }
 
         var request = URLRequest(url: url)
@@ -311,12 +329,10 @@ actor GitHubRESTClient: GitHubDataSource {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            throw AppError.networkError
+            throw RequestError.app(.networkError)
         }
 
-        guard let http = response as? HTTPURLResponse else { throw AppError.networkError }
-
-        updateRateLimits(from: http, bucket: rateLimit)
+        guard let http = response as? HTTPURLResponse else { throw RequestError.app(.networkError) }
 
         switch http.statusCode {
         case 200:
@@ -327,11 +343,11 @@ actor GitHubRESTClient: GitHubDataSource {
             return data
         case 304:
             if let cached = cachedResponses[url] { return cached }
-            guard allowRetryWithoutETag else { throw AppError.networkError }
+            guard allowRetryWithoutETag else { throw RequestError.app(.networkError) }
 
             let previousETag = etags.removeValue(forKey: url)
             do {
-                return try await get(path, rateLimit: rateLimit, allowRetryWithoutETag: false)
+                return try await requestData(path, allowRetryWithoutETag: false)
             } catch {
                 if let previousETag, etags[url] == nil {
                     etags[url] = previousETag
@@ -339,35 +355,37 @@ actor GitHubRESTClient: GitHubDataSource {
                 throw error
             }
         case 401:
-            throw AppError.authError
+            throw RequestError.statusCode(401)
         case 403:
             if isRateLimitedResponse(data, http) {
-                throw AppError.rateLimitExceeded(resetAt: rateLimitResetDate(from: http))
+                throw RequestError.app(.rateLimitExceeded(resetAt: rateLimitResetDate(from: http)))
             }
-            throw AppError.authError
+            throw RequestError.statusCode(403)
+        case 404:
+            throw RequestError.statusCode(404)
         case 429:
             let resetAt = rateLimitResetDate(from: http)
-            throw AppError.rateLimitExceeded(resetAt: resetAt)
+            throw RequestError.app(.rateLimitExceeded(resetAt: resetAt))
         case 500...599:
-            throw AppError.serverError(statusCode: http.statusCode)
+            throw RequestError.app(.serverError(statusCode: http.statusCode))
         default:
-            throw AppError.networkError
+            throw RequestError.app(.networkError)
         }
     }
 
-    private func updateRateLimits(from response: HTTPURLResponse, bucket: RateLimitBucket) {
-        if let remaining = response.value(forHTTPHeaderField: "X-RateLimit-Remaining").flatMap(Int.init) {
-            switch bucket {
-            case .core: coreRateLimitRemaining = remaining
-            case .search: searchRateLimitRemaining = remaining
+    private func mapRequestError(_ error: Error) -> Error {
+        switch error {
+        case let requestError as RequestError:
+            switch requestError {
+            case .app(let appError):
+                return appError
+            case .statusCode(401), .statusCode(403):
+                return AppError.authError
+            case .statusCode:
+                return AppError.networkError
             }
-        }
-        if let resetTS = response.value(forHTTPHeaderField: "X-RateLimit-Reset").flatMap(TimeInterval.init) {
-            let resetDate = Date(timeIntervalSince1970: resetTS)
-            switch bucket {
-            case .core: coreRateLimitResetDate = resetDate
-            case .search: searchRateLimitResetDate = resetDate
-            }
+        default:
+            return error
         }
     }
 
@@ -397,7 +415,6 @@ actor GitHubRESTClient: GitHubDataSource {
     private func extractRepoName(from repositoryURL: String) -> String? {
         guard let url = URL(string: repositoryURL) else { return nil }
         let components = url.pathComponents
-        // pathComponents: ["/", "repos", "owner", "repo"]
         guard let reposIdx = components.firstIndex(of: "repos"),
             reposIdx + 2 < components.count
         else { return nil }
