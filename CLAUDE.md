@@ -4,9 +4,13 @@ Swift/SwiftUI macOS 13+ menu bar app monitoring GitHub PR status. No external Sw
 
 ## Build & Test (CLI)
 
-- Build: `xcodebuild -project GitHubCommandCenter.xcodeproj -scheme GitHubCommandCenter -configuration Debug -destination 'platform=macOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build`
-- Test: same command but replace `build` with `test`
-- After editing `project.yml`: run `xcodegen generate` to regenerate `.xcodeproj`
+- First-time setup: `mise install`
+- Sync tools and regenerate the Xcode project: `mise run sync`
+- Build: `mise run build`
+- Test: `mise run test`
+- Style checks: `mise run check-style`
+- Full verification: `mise run check`
+- After editing `project.yml`: run `mise run sync`
 
 ## Skill routing
 

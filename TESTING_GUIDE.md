@@ -1,165 +1,191 @@
-# Testing Guide: GitHub Command Center
-
-Step-by-step instructions for building, running, and manually testing the app.
-
----
+# Development Setup
 
 ## Prerequisites
 
-- **macOS 13.0+** (Ventura or later)
-- **Xcode 16+** (verify: `xcode-select -p` should print a path)
-- **XcodeGen** (verify: `which xcodegen` — install with `brew install xcodegen` if missing)
+- **macOS 13.0+**
+- **Xcode 16+** (includes `swift format`)
+- **[mise](https://mise.jdx.dev/)** for tool and task management
 - A **GitHub account** with at least one open pull request you're involved in
 
----
-
-## Step 1: Create a GitHub Personal Access Token
-
-1. Go to <https://github.com/settings/tokens> (classic tokens) or <https://github.com/settings/tokens?type=beta> (fine-grained)
-2. Click **"Generate new token"**
-3. For a **classic token**:
-   - Give it a descriptive name (e.g. "Command Center")
-   - Select the **`repo`** scope (this grants read access to your PRs, reviews, and CI status)
-   - Click **Generate token**
-4. For a **fine-grained token**:
-   - Set repository access to **"All repositories"** (or select specific repos)
-   - Under **Repository permissions**, grant **Pull requests: Read** and **Commit statuses: Read**
-   - Click **Generate token**
-5. **Copy the token** — you won't be able to see it again
-
----
-
-## Step 2: Generate the Xcode Project
-
-From the repo root:
+## First-Time Setup
 
 ```bash
-cd /Users/awjdean/coding/github-command-center
-xcodegen generate
+mise install
+mise run sync
+mise run hooks:install
 ```
 
-This reads `project.yml` and produces `GitHubCommandCenter.xcodeproj`.
+`mise install` provisions the repo-managed tools defined in [`mise.toml`](/Users/awjdean/coding/github-command-center/mise.toml):
 
----
+| Tool | Purpose |
+| --- | --- |
+| `swiftlint` | Swift policy enforcement |
+| `xcodegen` | Regenerate `GitHubCommandCenter.xcodeproj` from `project.yml` |
+| `hk` | Git hook manager |
+| `pkl` | Configuration runtime required by `hk` |
 
-## Step 3: Build the App
+`swift format` ships with Xcode, so there is no separate formatter install.
 
-### Option A: Xcode GUI
+## Mise Tasks
 
-1. Open `GitHubCommandCenter.xcodeproj` in Xcode
-2. Select the **GitHubCommandCenter** scheme (top-left dropdown)
-3. Set the destination to **My Mac**
-4. Press **Cmd+B** to build
+Run any task with `mise run <task>`:
 
-### Option B: Command line
+| Task | Description |
+| --- | --- |
+| `sync` | Install tools and regenerate the Xcode project |
+| `open` | Open the generated Xcode project |
+| `build` | Build the app with `xcodebuild` |
+| `build-release` | Build the release app bundle into `build/DerivedData` |
+| `test` | Run the Swift test suite with `xcodebuild` |
+| `check-style` | Run `swift format` linting and `swiftlint` in read-only mode |
+| `fix-style` | Apply `swift format` and `swiftlint` fixes |
+| `check` | Run the full verification workflow |
+| `fix` | Regenerate the project and apply style fixes |
+| `hooks:install` | Install git hooks through `hk` |
+
+## Swift Formatting and Linting
+
+The repo uses a two-tool setup:
+
+### 1. `swift format`
+
+`swift format` handles formatting such as indentation, wrapping, spacing, and import ordering. Configuration lives in [`.swift-format`](/Users/awjdean/coding/github-command-center/.swift-format).
+
+Key settings:
+
+- Line length: `120`
+- Indentation: `4` spaces
+- Maximum blank lines: `1`
+- Trailing commas: required in multiline collections
+- File-scoped declarations: `private`
+- Break before each argument when wrapping
+
+Manual commands:
 
 ```bash
-xcodebuild \
-  -project GitHubCommandCenter.xcodeproj \
-  -scheme GitHubCommandCenter \
-  -configuration Debug \
-  -destination 'platform=macOS' \
-  CODE_SIGN_IDENTITY="" \
-  CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGNING_ALLOWED=NO \
-  build
+# Check only
+swift format lint --strict --recursive GitHubCommandCenter GitHubCommandCenterTests
+
+# Fix in place
+swift format --in-place --recursive GitHubCommandCenter GitHubCommandCenterTests
 ```
 
----
+### 2. `SwiftLint`
 
-## Step 4: Run the App
+`SwiftLint` enforces policy rules such as size limits, force unwrap usage, and naming. Configuration lives in [`.swiftlint.yml`](/Users/awjdean/coding/github-command-center/.swiftlint.yml).
 
-### Option A: Xcode GUI
+Formatting-overlap rules are disabled so `swift format` remains the single source of truth for code layout.
 
-Press **Cmd+R** in Xcode. The app has no Dock icon (it's a menu bar-only app via `LSUIElement`), so look for a new icon in your **menu bar** at the top of the screen.
+Notable thresholds:
 
-### Option B: Run the built binary directly
+| Rule | Warning | Error |
+| --- | --- | --- |
+| `line_length` | 120 | 200 |
+| `file_length` | 700 | 1000 |
+| `function_body_length` | 110 | 140 |
+| `type_body_length` | 600 | 700 |
+| `cyclomatic_complexity` | 20 | 30 |
+| `identifier_name` minimum | 2 chars | 1 char |
 
-After a successful build, find and launch the binary:
+Opt-in policy rules include `force_unwrapping`, `implicitly_unwrapped_optional`, `empty_count`, `first_where`, `toggle_bool`, and `modifier_order`.
+
+Allowed short identifiers: `id`, `x`, `y`, `i`, `j`, `k`.
+
+Manual commands:
 
 ```bash
-# Find the built app
-find ~/Library/Developer/Xcode/DerivedData -name "GitHubCommandCenter.app" -type d 2>/dev/null | head -1
+# Check
+swiftlint lint --strict
 
-# Launch it (substitute the actual path from above)
-open "<path>/GitHubCommandCenter.app"
+# Fix
+swiftlint lint --fix
 ```
 
----
-
-## Step 5: Configure Your Token
-
-1. The menu bar icon should appear (a small icon in the top bar)
-2. **Click the menu bar icon** — a dropdown panel will open
-3. Since no token is configured yet, you'll see a setup prompt
-4. Open **Settings**:
-   - Right-click the menu bar icon, or
-   - From the panel, look for a settings/gear option, or
-   - Use **Cmd+,** while the app is focused
-5. In the Settings window:
-   - Paste your GitHub token into the **"Paste your GitHub token here"** field
-   - Click **"Save Token"**
-   - Wait for validation — you should see a green checkmark and **"Connected as @yourusername"**
-   - If you see a red X with "Invalid token", double-check the token and its scopes
-
----
-
-## Step 6: Verify It Works
-
-Once the token is saved and validated:
-
-1. **Click the menu bar icon** — the panel should now show your open PRs
-2. Verify the following for each PR:
-   - PR title and repo name are correct
-   - CI status indicators (passing/failing/pending) match what you see on GitHub
-   - Review status (approved, changes requested, pending review) is accurate
-   - Draft status is shown correctly
-3. The menu bar icon color should reflect your PR health:
-   - **Green** — no PRs need your action
-   - **Yellow** — some PRs need attention
-   - **Red** — urgent PRs need your action
-4. **Click a PR row** — it should open the PR in your browser
-
----
-
-## Step 7: Run the Unit Tests
-
-### Option A: Xcode GUI
-
-Press **Cmd+U** in Xcode.
-
-### Option B: Command line
+### Combined style tasks
 
 ```bash
-xcodebuild \
-  -project GitHubCommandCenter.xcodeproj \
-  -scheme GitHubCommandCenter \
-  -configuration Debug \
-  -destination 'platform=macOS' \
-  CODE_SIGN_IDENTITY="" \
-  CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGNING_ALLOWED=NO \
-  test
+mise run check-style
+mise run fix-style
 ```
 
-This runs the test suite in `GitHubCommandCenterTests/`, which includes:
-- `PRStateTests` — PR model logic and triage sorting
-- `GitHubRESTClientTests` — API response parsing with mock networking
-- `PollingEngineTests` — polling lifecycle and state updates
-- `NotificationServiceTests` — notification triggering logic
-- `KeychainServiceTests` — token storage and retrieval
+## Git Hooks
 
----
+Git hooks are managed by [`hk`](https://github.com/jdx/hk) using [`hk.pkl`](/Users/awjdean/coding/github-command-center/hk.pkl).
+
+Install hooks with:
+
+```bash
+mise run hooks:install
+```
+
+The `pre-commit` hook:
+
+1. Stashes unstaged changes with `stash = "git"`
+2. Runs `mise run fix-style` when staged Swift files are present
+3. Re-runs `mise run check-style` to make sure the fixes are clean
+4. Runs trailing-whitespace and merge-conflict checks
+5. Re-stages files updated by the fix step
+
+## Build, Run, and Test
+
+### Command line
+
+```bash
+mise run build
+mise run test
+```
+
+To open the project in Xcode:
+
+```bash
+mise run open
+```
+
+### Xcode
+
+1. Run `mise run sync` if `project.yml` changed
+2. Open `GitHubCommandCenter.xcodeproj`
+3. Select the **GitHubCommandCenter** scheme
+4. Set the destination to **My Mac**
+5. Press **Cmd+B** to build or **Cmd+U** to run tests
+
+## Manual App Testing
+
+### 1. Create a GitHub personal access token
+
+1. Go to <https://github.com/settings/tokens> or <https://github.com/settings/tokens?type=beta>
+2. Generate either:
+   - A classic token with the `repo` scope, or
+   - A fine-grained token with **Pull requests: Read** and **Commit statuses: Read**
+3. Copy the token
+
+### 2. Launch the app
+
+1. Build with `mise run build` or run the app from Xcode with **Cmd+R**
+2. Look for the menu bar icon at the top of the screen
+
+### 3. Configure the token
+
+1. Open the menu bar app
+2. Open **Settings**
+3. Paste the token into **Paste your GitHub token here**
+4. Click **Save Token**
+5. Confirm you see **Connected as @yourusername**
+
+### 4. Verify behavior
+
+1. Open the menu bar panel
+2. Confirm PR titles, repo names, review state, draft state, and CI indicators match GitHub
+3. Confirm the icon color matches repo health
+4. Click a PR row and verify it opens in the browser
 
 ## Troubleshooting
 
 | Problem | Solution |
-|---|---|
-| **"Invalid token"** after saving | Ensure the token has the `repo` scope. Fine-grained tokens need Pull requests + Commit statuses read access. |
-| **No menu bar icon appears** | The app is `LSUIElement` (no Dock icon). Look carefully in the menu bar. If running via Xcode, check the console for crash logs. |
-| **Build fails with signing errors** | Use the CLI build command above which disables code signing, or in Xcode set Signing to "Sign to Run Locally". |
-| **"Rate limit exceeded"** | The GitHub API allows 5,000 requests/hour for authenticated users. If you have many PRs, wait for the reset time shown in the app. |
-| **PRs not showing up** | The app searches for PRs where you are involved (author, reviewer, assignee, mentioned). Check that your token username matches. |
-| **Stale data indicator** | If data is >5 minutes old, the app marks it as stale. Click refresh or wait for the next automatic poll. |
-| **XcodeGen not found** | Install with `brew install xcodegen` |
-| **Xcode project out of date** | Run `xcodegen generate` after any changes to `project.yml` |
+| --- | --- |
+| `mise run sync` fails because tools are missing | Run `mise install` first |
+| `swiftlint` is not found | Run `mise install` so the repo-managed version is installed |
+| Build fails with signing errors | Use the `mise run build` task, which disables code signing for local builds |
+| `GitHubCommandCenter.xcodeproj` is stale | Run `mise run sync` after changing `project.yml` |
+| Hooks do not run | Reinstall them with `mise run hooks:install` |
+| Token validation fails | Ensure the token has the required repo or fine-grained read permissions |
