@@ -3,15 +3,22 @@ import Foundation
 @MainActor
 final class PollingEngine {
     private let appState: AppState
+    private let recentlyClosedClearDelay: TimeInterval
     // Typed as the protocol so tests can inject a mock without touching Keychain
     var client: (any GitHubDataSource)?
     private var pollingTask: Task<Void, Never>?
+    private var clearRecentlyClosedTask: Task<Void, Never>?
     private var previousPRs: [PRState] = []
     private var consecutiveFailures = 0
 
-    init(appState: AppState, dataSource: (any GitHubDataSource)? = nil) {
+    init(
+        appState: AppState,
+        dataSource: (any GitHubDataSource)? = nil,
+        recentlyClosedClearDelay: TimeInterval = 5
+    ) {
         self.appState = appState
         self.client = dataSource
+        self.recentlyClosedClearDelay = recentlyClosedClearDelay
     }
 
     func start() {
@@ -22,6 +29,13 @@ final class PollingEngine {
     func stop() {
         pollingTask?.cancel()
         pollingTask = nil
+    }
+
+    func reset() {
+        clearRecentlyClosedTask?.cancel()
+        clearRecentlyClosedTask = nil
+        previousPRs = []
+        consecutiveFailures = 0
     }
 
     func forceRefresh() {
@@ -60,7 +74,19 @@ final class PollingEngine {
 
         // Create REST client from Keychain token if none was injected
         if client == nil {
-            guard let token = try? KeychainService.shared.loadToken(), !token.isEmpty else {
+            let token: String?
+            do {
+                token = try KeychainService.shared.loadToken()
+            } catch {
+                appState.authenticationStatus = .failed
+                appState.error = .authError
+                appState.isLoading = false
+                appState.recomputeStaleness()
+                stop()
+                return
+            }
+
+            guard let token, !token.isEmpty else {
                 appState.authenticationStatus = .noToken
                 appState.error = .noToken
                 appState.isLoading = false
@@ -104,9 +130,13 @@ final class PollingEngine {
             // Show recently closed for one poll cycle then clear
             appState.recentlyClosedPRs = recentlyClosed
             if !recentlyClosed.isEmpty {
-                Task { [weak appState] in
-                    try? await Task.sleep(nanoseconds: 5_000_000_000)
-                    appState?.recentlyClosedPRs = []
+                clearRecentlyClosedTask?.cancel()
+                clearRecentlyClosedTask = Task { @MainActor [weak self] in
+                    let delay = UInt64(recentlyClosedClearDelay * 1_000_000_000)
+                    try? await Task.sleep(nanoseconds: delay)
+                    guard !Task.isCancelled else { return }
+                    self?.appState.recentlyClosedPRs = []
+                    self?.clearRecentlyClosedTask = nil
                 }
             }
 
@@ -151,6 +181,11 @@ final class PollingEngine {
                 appState.isRateLimited = false
                 await runLoop()
             }
+
+        } catch AppError.incompleteSearchResults {
+            appState.error = .incompleteSearchResults
+            appState.isLoading = false
+            appState.recomputeStaleness()
 
         } catch {
             consecutiveFailures += 1

@@ -67,7 +67,7 @@ final class NotificationService {
         }
 
         // PR merged or closed
-        for pr in disappeared {
+        for pr in disappeared where pr.assignment.createdByMe {
             fire(title: "PR Closed — #\(pr.number)",
                  body: "\"\(pr.title)\" was merged or closed")
         }
