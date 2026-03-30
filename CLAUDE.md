@@ -1,3 +1,13 @@
+## Project
+
+Swift/SwiftUI macOS 13+ menu bar app monitoring GitHub PR status. No external Swift dependencies.
+
+## Build & Test (CLI)
+
+- Build: `xcodebuild -project GitHubCommandCenter.xcodeproj -scheme GitHubCommandCenter -configuration Debug -destination 'platform=macOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build`
+- Test: same command but replace `build` with `test`
+- After editing `project.yml`: run `xcodegen generate` to regenerate `.xcodeproj`
+
 ## Skill routing
 
 When the user's request matches an available skill, ALWAYS invoke it using the Skill
