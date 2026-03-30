@@ -6,18 +6,19 @@ struct PRRowView: View {
 
     var body: some View {
         Button {
-            NSWorkspace.shared.open(pr.url)
+            let opened = NSWorkspace.shared.open(pr.url)
+            if !opened {
+                print("Failed to open PR URL for \(pr.id): \(pr.url.absoluteString)")
+            }
         } label: {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        // PR number — styled as a link
                         Text("#\(pr.number)")
                             .font(.prNumber)
                             .foregroundColor(.linkBlue)
                             .underline()
 
-                        // Role label (Your PR / Assigned / Review requested)
                         if !pr.displayRole.isEmpty {
                             Text(pr.displayRole)
                                 .font(.system(size: 9, weight: .medium))
@@ -30,7 +31,6 @@ struct PRRowView: View {
 
                         Spacer()
 
-                        // Draft badge
                         if pr.draftStatus == .draft {
                             Text("DRAFT")
                                 .font(.system(size: 8, weight: .semibold))
@@ -57,7 +57,6 @@ struct PRRowView: View {
 
                         Spacer()
 
-                        // Three status dots: CI • Review • Merge
                         HStack(spacing: 5) {
                             StatusDotView(dimension: .ci, pr: pr)
                             StatusDotView(dimension: .review, pr: pr)
