@@ -119,7 +119,7 @@ struct SettingsView: View {
         Task {
             do {
                 let client = GitHubRESTClient(token: tokenInput)
-                let username = try await client.validateToken()
+                let username = try await client.validateTokenForAppAccess()
                 try KeychainService.shared.saveToken(tokenInput)
                 tokenState = .valid(username: username)
                 appState.resetPolling()

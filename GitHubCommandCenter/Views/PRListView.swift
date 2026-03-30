@@ -34,11 +34,16 @@ struct PRListView: View {
             // Main content
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    if appState.isLoading {
+                    switch appState.panelContentState {
+                    case .loading:
                         skeletonView
-                    } else if appState.prs.isEmpty {
+                    case .setupRequired:
+                        setupStateView
+                    case .authError:
+                        authFailedStateView
+                    case .empty:
                         emptyStateView
-                    } else {
+                    case .prList:
                         prSections
                     }
 
@@ -146,6 +151,36 @@ struct PRListView: View {
                 .foregroundColor(.textSecondary)
         }
         .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+    }
+
+    private var setupStateView: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "key.fill")
+                .font(.system(size: 28))
+                .foregroundColor(.statusYellow)
+            Text("Add a GitHub token in Settings to start tracking pull requests.")
+                .font(.prTitle)
+                .foregroundColor(.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 40)
+    }
+
+    private var authFailedStateView: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "exclamationmark.circle")
+                .font(.system(size: 28))
+                .foregroundColor(.statusRed)
+            Text("Update your GitHub token in Settings to resume tracking pull requests.")
+                .font(.prTitle)
+                .foregroundColor(.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
         .padding(.vertical, 40)
     }
 
