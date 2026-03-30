@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import GitHubCommandCenter
 
 @Suite(.serialized)
@@ -69,7 +70,7 @@ struct GitHubRESTClientTests {
             statusCode: 403,
             headers: [
                 "X-RateLimit-Remaining": "0",
-                "X-RateLimit-Reset": "\(resetTS)"
+                "X-RateLimit-Reset": "\(resetTS)",
             ],
             json: ["message": "API rate limit exceeded"]
         )
@@ -141,11 +142,14 @@ struct GitHubRESTClientTests {
     func validateTokenForAppAccess_success_returnsUsernameWhenSearchEmpty() async throws {
         let harness = Harness()
         MockURLProtocol.stub(urlContains: "/user", json: ["login": "octocat"])
-        MockURLProtocol.stub(urlContains: "/search/issues", json: [
-            "total_count": 0,
-            "incomplete_results": false,
-            "items": []
-        ])
+        MockURLProtocol.stub(
+            urlContains: "/search/issues",
+            json: [
+                "total_count": 0,
+                "incomplete_results": false,
+                "items": [],
+            ]
+        )
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let username = try await client.validateTokenForAppAccess()
@@ -153,8 +157,8 @@ struct GitHubRESTClientTests {
         #expect(username == "octocat")
         #expect(
             MockURLProtocol.capturedRequests.contains {
-                ($0.url?.absoluteString.contains("/search/issues") ?? false) &&
-                ($0.url?.absoluteString.contains("per_page=1") ?? false)
+                ($0.url?.absoluteString.contains("/search/issues") ?? false)
+                    && ($0.url?.absoluteString.contains("per_page=1") ?? false)
             }
         )
     }
@@ -181,11 +185,14 @@ struct GitHubRESTClientTests {
     func validateTokenForAppAccess_incompleteSearchResults_throwsIncompleteSearchResults() async {
         let harness = Harness()
         MockURLProtocol.stub(urlContains: "/user", json: ["login": "octocat"])
-        MockURLProtocol.stub(urlContains: "/search/issues", json: [
-            "total_count": 1,
-            "incomplete_results": true,
-            "items": []
-        ])
+        MockURLProtocol.stub(
+            urlContains: "/search/issues",
+            json: [
+                "total_count": 1,
+                "incomplete_results": true,
+                "items": [],
+            ]
+        )
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
 
@@ -202,11 +209,14 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_emptySearch_returnsEmptyArray() async throws {
         let harness = Harness()
-        MockURLProtocol.stub(urlContains: "/search/issues", json: [
-            "total_count": 0,
-            "incomplete_results": false,
-            "items": []
-        ])
+        MockURLProtocol.stub(
+            urlContains: "/search/issues",
+            json: [
+                "total_count": 0,
+                "incomplete_results": false,
+                "items": [],
+            ]
+        )
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
@@ -235,28 +245,31 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_sameNumberDifferentRepos_haveDistinctIDs() async throws {
         let harness = Harness()
-        MockURLProtocol.stub(urlContains: "/search/issues", json: [
-            "total_count": 2,
-            "incomplete_results": false,
-            "items": [
-                [
-                    "number": 42,
-                    "title": "Repo one",
-                    "html_url": "https://github.com/org/one/pull/42",
-                    "draft": false,
-                    "updated_at": "2026-03-30T10:00:00Z",
-                    "repository_url": "https://api.github.com/repos/org/one"
+        MockURLProtocol.stub(
+            urlContains: "/search/issues",
+            json: [
+                "total_count": 2,
+                "incomplete_results": false,
+                "items": [
+                    [
+                        "number": 42,
+                        "title": "Repo one",
+                        "html_url": "https://github.com/org/one/pull/42",
+                        "draft": false,
+                        "updated_at": "2026-03-30T10:00:00Z",
+                        "repository_url": "https://api.github.com/repos/org/one",
+                    ],
+                    [
+                        "number": 42,
+                        "title": "Repo two",
+                        "html_url": "https://github.com/org/two/pull/42",
+                        "draft": false,
+                        "updated_at": "2026-03-30T11:00:00Z",
+                        "repository_url": "https://api.github.com/repos/org/two",
+                    ],
                 ],
-                [
-                    "number": 42,
-                    "title": "Repo two",
-                    "html_url": "https://github.com/org/two/pull/42",
-                    "draft": false,
-                    "updated_at": "2026-03-30T11:00:00Z",
-                    "repository_url": "https://api.github.com/repos/org/two"
-                ]
             ]
-        ])
+        )
 
         for repo in ["one", "two"] {
             MockURLProtocol.stub(urlContains: "/repos/org/\(repo)/pulls/42/reviews", json: [])
@@ -264,18 +277,24 @@ struct GitHubRESTClientTests {
                 urlContains: "/repos/org/\(repo)/commits/abc123def456/check-runs",
                 json: ["check_runs": []]
             )
-            MockURLProtocol.stub(urlContains: "/repos/org/\(repo)/commits/abc123def456/status", json: [
-                "state": "success",
-                "statuses": []
-            ])
-            MockURLProtocol.stub(urlContains: "/repos/org/\(repo)/pulls/42", json: [
-                "head": ["sha": "abc123def456"],
-                "state": "open",
-                "user": ["login": "octocat"],
-                "assignees": [],
-                "requested_reviewers": [],
-                "mergeable_state": "clean"
-            ])
+            MockURLProtocol.stub(
+                urlContains: "/repos/org/\(repo)/commits/abc123def456/status",
+                json: [
+                    "state": "success",
+                    "statuses": [],
+                ]
+            )
+            MockURLProtocol.stub(
+                urlContains: "/repos/org/\(repo)/pulls/42",
+                json: [
+                    "head": ["sha": "abc123def456"],
+                    "state": "open",
+                    "user": ["login": "octocat"],
+                    "assignees": [],
+                    "requested_reviewers": [],
+                    "mergeable_state": "clean",
+                ]
+            )
         }
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
@@ -337,7 +356,7 @@ struct GitHubRESTClientTests {
             mergeableState: "clean",
             checkRuns: [
                 ["name": "unit-tests", "status": "completed", "conclusion": "failure"],
-                ["name": "lint", "status": "completed", "conclusion": "success"]
+                ["name": "lint", "status": "completed", "conclusion": "success"],
             ]
         )
 
@@ -385,10 +404,12 @@ struct GitHubRESTClientTests {
             number: 1,
             checkRuns: [],
             statusState: "failure",
-            commitStatuses: [[
-                "context": "legacy-ci",
-                "state": "failure"
-            ]]
+            commitStatuses: [
+                [
+                    "context": "legacy-ci",
+                    "state": "failure",
+                ]
+            ]
         )
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
@@ -498,46 +519,71 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_paginatedReviews_useLatestPage() async throws {
         let harness = Harness()
-        MockURLProtocol.stub(urlContains: "/search/issues", json: [
-            "total_count": 1,
-            "incomplete_results": false,
-            "items": [[
-                "number": 1,
-                "title": "Test PR",
-                "html_url": "https://github.com/owner/repo/pull/1",
-                "draft": false,
-                "updated_at": "2026-03-30T10:00:00Z",
-                "repository_url": "https://api.github.com/repos/owner/repo"
-            ]]
-        ])
+        MockURLProtocol.stub(
+            urlContains: "/search/issues",
+            json: [
+                "total_count": 1,
+                "incomplete_results": false,
+                "items": [
+                    [
+                        "number": 1,
+                        "title": "Test PR",
+                        "html_url": "https://github.com/owner/repo/pull/1",
+                        "draft": false,
+                        "updated_at": "2026-03-30T10:00:00Z",
+                        "repository_url": "https://api.github.com/repos/owner/repo",
+                    ]
+                ],
+            ]
+        )
         MockURLProtocol.stub(
             urlContains: "/pulls/1/reviews?per_page=100&page=1",
-            json: Array(repeating: [
-                "user": ["login": "alice"],
-                "state": "APPROVED"
-            ], count: 100)
+            json: Array(
+                repeating: [
+                    "user": ["login": "alice"],
+                    "state": "APPROVED",
+                ],
+                count: 100
+            )
         )
-        MockURLProtocol.stub(urlContains: "/pulls/1/reviews?per_page=100&page=2", json: [[
-            "user": ["login": "alice"],
-            "state": "CHANGES_REQUESTED"
-        ]])
-        MockURLProtocol.stub(urlContains: "/pulls/1/reviews", json: Array(repeating: [
-            "user": ["login": "alice"],
-            "state": "APPROVED"
-        ], count: 30))
+        MockURLProtocol.stub(
+            urlContains: "/pulls/1/reviews?per_page=100&page=2",
+            json: [
+                [
+                    "user": ["login": "alice"],
+                    "state": "CHANGES_REQUESTED",
+                ]
+            ]
+        )
+        MockURLProtocol.stub(
+            urlContains: "/pulls/1/reviews",
+            json: Array(
+                repeating: [
+                    "user": ["login": "alice"],
+                    "state": "APPROVED",
+                ],
+                count: 30
+            )
+        )
         MockURLProtocol.stub(urlContains: "/commits/abc123def456/check-runs", json: ["check_runs": []])
-        MockURLProtocol.stub(urlContains: "/commits/abc123def456/status", json: [
-            "state": "success",
-            "statuses": []
-        ])
-        MockURLProtocol.stub(urlContains: "/pulls/1", json: [
-            "head": ["sha": "abc123def456"],
-            "state": "open",
-            "user": ["login": "octocat"],
-            "assignees": [],
-            "requested_reviewers": [],
-            "mergeable_state": "clean"
-        ])
+        MockURLProtocol.stub(
+            urlContains: "/commits/abc123def456/status",
+            json: [
+                "state": "success",
+                "statuses": [],
+            ]
+        )
+        MockURLProtocol.stub(
+            urlContains: "/pulls/1",
+            json: [
+                "head": ["sha": "abc123def456"],
+                "state": "open",
+                "user": ["login": "octocat"],
+                "assignees": [],
+                "requested_reviewers": [],
+                "mergeable_state": "clean",
+            ]
+        )
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
@@ -596,33 +642,44 @@ struct GitHubRESTClientTests {
         statusState: String = "success",
         commitStatuses: [[String: Any]] = []
     ) {
-        MockURLProtocol.stub(urlContains: "/search/issues", json: [
-            "total_count": 1,
-            "incomplete_results": false,
-            "items": [[
-                "number": number,
-                "title": title,
-                "html_url": "https://github.com/\(owner)/\(repo)/pull/\(number)",
-                "draft": false,
-                "updated_at": updatedAt,
-                "repository_url": "https://api.github.com/repos/\(owner)/\(repo)"
-            ]]
-        ])
+        MockURLProtocol.stub(
+            urlContains: "/search/issues",
+            json: [
+                "total_count": 1,
+                "incomplete_results": false,
+                "items": [
+                    [
+                        "number": number,
+                        "title": title,
+                        "html_url": "https://github.com/\(owner)/\(repo)/pull/\(number)",
+                        "draft": false,
+                        "updated_at": updatedAt,
+                        "repository_url": "https://api.github.com/repos/\(owner)/\(repo)",
+                    ]
+                ],
+            ]
+        )
         MockURLProtocol.stub(urlContains: "/pulls/\(number)/reviews?per_page=100&page=1", json: reviews)
         MockURLProtocol.stub(urlContains: "/pulls/\(number)/reviews?per_page=100&page=2", json: [])
         MockURLProtocol.stub(urlContains: "/pulls/\(number)/reviews", json: reviews)
         MockURLProtocol.stub(urlContains: "/check-runs", json: ["check_runs": checkRuns])
-        MockURLProtocol.stub(urlContains: "/status", json: [
-            "state": statusState,
-            "statuses": commitStatuses
-        ])
-        MockURLProtocol.stub(urlContains: "/pulls/\(number)", json: [
-            "head": ["sha": "abc123def456"],
-            "state": "open",
-            "user": ["login": authorLogin],
-            "assignees": assignees,
-            "requested_reviewers": requestedReviewers,
-            "mergeable_state": mergeableState
-        ])
+        MockURLProtocol.stub(
+            urlContains: "/status",
+            json: [
+                "state": statusState,
+                "statuses": commitStatuses,
+            ]
+        )
+        MockURLProtocol.stub(
+            urlContains: "/pulls/\(number)",
+            json: [
+                "head": ["sha": "abc123def456"],
+                "state": "open",
+                "user": ["login": authorLogin],
+                "assignees": assignees,
+                "requested_reviewers": requestedReviewers,
+                "mergeable_state": mergeableState,
+            ]
+        )
     }
 }

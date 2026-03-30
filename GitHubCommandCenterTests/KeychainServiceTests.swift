@@ -1,6 +1,7 @@
 import Foundation
 import Security
 import Testing
+
 @testable import GitHubCommandCenter
 
 @Suite
@@ -107,7 +108,7 @@ struct KeychainServiceTests {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: serviceName,
-            kSecAttrAccount: "github-pat"
+            kSecAttrAccount: "github-pat",
         ]
 
         let deleteStatus = SecItemDelete(query as CFDictionary)

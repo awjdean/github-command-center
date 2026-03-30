@@ -8,9 +8,9 @@ struct MenuBarIconView: View {
     // so we use distinct SF Symbol shapes to convey state without relying on color.
     private var symbolName: String {
         switch healthStatus {
-        case .green:  return "checkmark.circle"
+        case .green: return "checkmark.circle"
         case .yellow: return "exclamationmark.triangle"
-        case .red:    return "xmark.circle"
+        case .red: return "xmark.circle"
         }
     }
 

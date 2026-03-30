@@ -54,9 +54,13 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
 
-                Link("Create token at github.com/settings/tokens",
-                     destination: URL(string: "https://github.com/settings/tokens")!)
+                if let tokenSettingsURL = URL(string: "https://github.com/settings/tokens") {
+                    Link(
+                        "Create token at github.com/settings/tokens",
+                        destination: tokenSettingsURL
+                    )
                     .font(.caption)
+                }
 
                 HStack {
                     Button(isValidating ? "Validating…" : "Save Token") {
@@ -86,9 +90,13 @@ struct SettingsView: View {
                 Text("Open source, MIT License")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Link("View on GitHub",
-                     destination: URL(string: "https://github.com/awjdean/github-command-center")!)
+                if let repositoryURL = URL(string: "https://github.com/awjdean/github-command-center") {
+                    Link(
+                        "View on GitHub",
+                        destination: repositoryURL
+                    )
                     .font(.caption)
+                }
             }
         }
         .padding(20)
@@ -99,8 +107,8 @@ struct SettingsView: View {
     private var borderColor: Color {
         switch tokenState {
         case .empty, .unvalidated: return .clear
-        case .valid:               return .green.opacity(0.7)
-        case .invalid:             return .red.opacity(0.7)
+        case .valid: return .green.opacity(0.7)
+        case .invalid: return .red.opacity(0.7)
         }
     }
 

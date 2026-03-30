@@ -30,36 +30,36 @@ struct StatusDotView: View {
 
     private var dotColor: Color {
         switch dimension {
-        case .ci:     return ciColor
+        case .ci: return ciColor
         case .review: return reviewColor
-        case .merge:  return mergeColor
+        case .merge: return mergeColor
         }
     }
 
     private var ciColor: Color {
         switch pr.ciStatus {
-        case .passing:  return .statusGreen
-        case .failing:  return .statusRed
-        case .pending:  return .statusYellow
-        case .none:     return .statusGray
+        case .passing: return .statusGreen
+        case .failing: return .statusRed
+        case .pending: return .statusYellow
+        case .none: return .statusGray
         }
     }
 
     private var reviewColor: Color {
         switch pr.reviewStatus {
-        case .approved:          return .statusGreen
-        case .changesRequested:  return .statusRed
-        case .requested:         return .statusYellow
-        case .none:              return .statusGray
+        case .approved: return .statusGreen
+        case .changesRequested: return .statusRed
+        case .requested: return .statusYellow
+        case .none: return .statusGray
         }
     }
 
     private var mergeColor: Color {
         switch pr.mergeStatus {
-        case .ready:     return .statusGreen
+        case .ready: return .statusGreen
         case .conflicts: return .statusRed
-        case .blocked:   return .statusYellow
-        case .pending:   return .statusGray
+        case .blocked: return .statusYellow
+        case .pending: return .statusGray
         }
     }
 
@@ -72,21 +72,21 @@ struct StatusDotView: View {
             case .passing: return "P"
             case .failing: return "X"
             case .pending: return "~"
-            case .none:    return "-"
+            case .none: return "-"
             }
         case .review:
             switch pr.reviewStatus {
-            case .approved:         return "A"
+            case .approved: return "A"
             case .changesRequested: return "X"
-            case .requested:        return "~"
-            case .none:             return "-"
+            case .requested: return "~"
+            case .none: return "-"
             }
         case .merge:
             switch pr.mergeStatus {
-            case .ready:     return "M"
+            case .ready: return "M"
             case .conflicts: return "C"
-            case .blocked:   return "B"
-            case .pending:   return "~"
+            case .blocked: return "B"
+            case .pending: return "~"
             }
         }
     }
@@ -95,9 +95,9 @@ struct StatusDotView: View {
 
     private var tooltipLabel: String {
         switch dimension {
-        case .ci:     return "CI"
+        case .ci: return "CI"
         case .review: return "REVIEW"
-        case .merge:  return "MERGE"
+        case .merge: return "MERGE"
         }
     }
 

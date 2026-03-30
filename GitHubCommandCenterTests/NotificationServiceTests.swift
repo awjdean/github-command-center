@@ -1,4 +1,5 @@
 import Testing
+
 @testable import GitHubCommandCenter
 
 @Suite
@@ -194,7 +195,7 @@ struct NotificationServiceTests {
         let prs = [
             PRState.fixture(number: 1, createdByMe: true),
             PRState.fixture(number: 2, createdByMe: false),
-            PRState.fixture(number: 3, createdByMe: true)
+            PRState.fixture(number: 3, createdByMe: true),
         ]
 
         harness.service.checkTransitions(from: prs, to: [], disappeared: prs)

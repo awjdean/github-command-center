@@ -1,5 +1,5 @@
-import SwiftUI
 import ServiceManagement
+import SwiftUI
 
 struct PRListView: View {
     @EnvironmentObject var appState: AppState
@@ -12,9 +12,10 @@ struct PRListView: View {
             // Stale / rate-limit warning bar
             if appState.isRateLimited {
                 warningBar(
-                    text: "Rate limited" + (appState.rateLimitResetDate.map {
-                        " — resets \(RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date()))"
-                    } ?? ""),
+                    text: "Rate limited"
+                        + (appState.rateLimitResetDate.map {
+                            " — resets \(RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date()))"
+                        } ?? ""),
                     color: .statusRed
                 )
             } else if appState.isStale {
@@ -330,7 +331,11 @@ private struct SkeletonRowView: View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 6) {
                 RoundedRectangle(cornerRadius: 3).fill(shimmerColor).frame(width: 60, height: 10)
-                RoundedRectangle(cornerRadius: 3).fill(shimmerColor).frame(maxWidth: .infinity, minHeight: 10, maxHeight: 10)
+                RoundedRectangle(cornerRadius: 3).fill(shimmerColor).frame(
+                    maxWidth: .infinity,
+                    minHeight: 10,
+                    maxHeight: 10
+                )
                 HStack {
                     RoundedRectangle(cornerRadius: 3).fill(shimmerColor).frame(width: 80, height: 8)
                     Spacer()

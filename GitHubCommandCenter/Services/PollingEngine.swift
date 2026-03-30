@@ -62,7 +62,7 @@ final class PollingEngine {
         switch appState.prs.count {
         case 0..<20: return 60
         case 20..<40: return 120
-        default:     return 300
+        default: return 300
         }
     }
 
@@ -103,8 +103,8 @@ final class PollingEngine {
         do {
             // Get username — validate once, then reuse
             let username: String
-            if case .authenticated(let u) = appState.authenticationStatus {
-                username = u
+            if case .authenticated(let authenticatedUsername) = appState.authenticationStatus {
+                username = authenticatedUsername
             } else {
                 username = try await client.validateToken()
                 appState.authenticationStatus = .authenticated(username: username)
@@ -132,7 +132,7 @@ final class PollingEngine {
             if !recentlyClosed.isEmpty {
                 clearRecentlyClosedTask?.cancel()
                 clearRecentlyClosedTask = Task { @MainActor [weak self] in
-                    let delay = UInt64(recentlyClosedClearDelay * 1_000_000_000)
+                    let delay = UInt64((self?.recentlyClosedClearDelay ?? 0) * 1_000_000_000)
                     try? await Task.sleep(nanoseconds: delay)
                     guard !Task.isCancelled else { return }
                     self?.appState.recentlyClosedPRs = []

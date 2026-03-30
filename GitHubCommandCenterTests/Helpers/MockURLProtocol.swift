@@ -71,12 +71,14 @@ final class MockURLProtocol: URLProtocol {
         var headerFields = mock.headers
         headerFields["Content-Type"] = "application/json"
 
-        guard let response = HTTPURLResponse(
-            url: url,
-            statusCode: mock.statusCode,
-            httpVersion: "HTTP/1.1",
-            headerFields: headerFields
-        ) else {
+        guard
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: mock.statusCode,
+                httpVersion: "HTTP/1.1",
+                headerFields: headerFields
+            )
+        else {
             client?.urlProtocol(self, didFailWithError: MockError.invalidResponse(url: url))
             return
         }

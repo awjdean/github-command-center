@@ -74,8 +74,8 @@ actor GitHubRESTClient: GitHubDataSource {
         var page = 1
 
         while true {
-            let q = "is:pr is:open involves:\(username)"
-            guard let encoded = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            let query = "is:pr is:open involves:\(username)"
+            guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
                 throw AppError.networkError
             }
             let path = "/search/issues?q=\(encoded)&per_page=\(perPage)&page=\(page)&sort=updated&order=desc"
@@ -97,7 +97,8 @@ actor GitHubRESTClient: GitHubDataSource {
 
     private func buildPRState(from item: SearchItem, username: String) async throws -> PRState? {
         guard let repoFullName = extractRepoName(from: item.repositoryUrl),
-              let (owner, repo) = splitRepoFullName(repoFullName) else { return nil }
+            let (owner, repo) = splitRepoFullName(repoFullName)
+        else { return nil }
         let number = item.number
 
         // Fetch PR detail, reviews, and check runs concurrently
@@ -126,7 +127,11 @@ actor GitHubRESTClient: GitHubDataSource {
             url: prURL,
             headSHA: detail.head.sha,
             draftStatus: item.draft == true ? .draft : .ready,
-            ciStatus: buildCIStatus(from: checkRuns, commitStatuses: commitStatuses.statuses, combinedStatusState: commitStatuses.state),
+            ciStatus: buildCIStatus(
+                from: checkRuns,
+                commitStatuses: commitStatuses.statuses,
+                combinedStatusState: commitStatuses.state
+            ),
             reviewStatus: buildReviewStatus(reviews: reviews, requestedReviewers: detail.requestedReviewers),
             mergeStatus: buildMergeStatus(from: detail.mergeableState),
             assignment: assignment,
@@ -211,14 +216,13 @@ actor GitHubRESTClient: GitHubDataSource {
         guard totalChecks > 0 else { return .none }
 
         let hasPending = checkRuns.contains { $0.status != "completed" }
-        let hasPendingCommitStatus = combinedStatusState == "pending" || latestStatuses.contains { $0.state == "pending" }
+        let hasPendingCommitStatus =
+            combinedStatusState == "pending" || latestStatuses.contains { $0.state == "pending" }
         if hasPending || hasPendingCommitStatus { return .pending }
 
         let failingCheckRuns = checkRuns.filter { run in
-            run.status == "completed" &&
-            run.conclusion != "success" &&
-            run.conclusion != "skipped" &&
-            run.conclusion != "neutral"
+            run.status == "completed" && run.conclusion != "success" && run.conclusion != "skipped"
+                && run.conclusion != "neutral"
         }
         let failingCommitStatuses = latestStatuses.filter { ["error", "failure"].contains($0.state) }
 
@@ -261,11 +265,11 @@ actor GitHubRESTClient: GitHubDataSource {
 
     private func buildMergeStatus(from mergeableState: String?) -> PRState.MergeStatus {
         switch mergeableState {
-        case "clean":    return .ready
-        case "dirty":    return .conflicts
-        case "blocked":  return .blocked
-        case "unstable": return .ready   // mergeable despite failing checks; CI tracked separately
-        default:         return .pending // "unknown", nil, or any future undocumented value
+        case "clean": return .ready
+        case "dirty": return .conflicts
+        case "blocked": return .blocked
+        case "unstable": return .ready  // mergeable despite failing checks; CI tracked separately
+        default: return .pending  // "unknown", nil, or any future undocumented value
         }
     }
 
@@ -354,14 +358,14 @@ actor GitHubRESTClient: GitHubDataSource {
     private func updateRateLimits(from response: HTTPURLResponse, bucket: RateLimitBucket) {
         if let remaining = response.value(forHTTPHeaderField: "X-RateLimit-Remaining").flatMap(Int.init) {
             switch bucket {
-            case .core:   coreRateLimitRemaining = remaining
+            case .core: coreRateLimitRemaining = remaining
             case .search: searchRateLimitRemaining = remaining
             }
         }
         if let resetTS = response.value(forHTTPHeaderField: "X-RateLimit-Reset").flatMap(TimeInterval.init) {
             let resetDate = Date(timeIntervalSince1970: resetTS)
             switch bucket {
-            case .core:   coreRateLimitResetDate = resetDate
+            case .core: coreRateLimitResetDate = resetDate
             case .search: searchRateLimitResetDate = resetDate
             }
         }
@@ -395,7 +399,8 @@ actor GitHubRESTClient: GitHubDataSource {
         let components = url.pathComponents
         // pathComponents: ["/", "repos", "owner", "repo"]
         guard let reposIdx = components.firstIndex(of: "repos"),
-              reposIdx + 2 < components.count else { return nil }
+            reposIdx + 2 < components.count
+        else { return nil }
         return "\(components[reposIdx + 1])/\(components[reposIdx + 2])"
     }
 

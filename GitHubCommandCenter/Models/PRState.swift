@@ -34,10 +34,10 @@ struct PRState: Identifiable, Equatable, Sendable {
 
     // Mapped from GitHub's undocumented mergeable_state field
     enum MergeStatus: Equatable, Sendable {
-        case ready     // "clean"
-        case conflicts // "dirty"
-        case blocked   // "blocked" — branch protection not satisfied
-        case pending   // "unknown" or null — not yet computed
+        case ready  // "clean"
+        case conflicts  // "dirty"
+        case blocked  // "blocked" — branch protection not satisfied
+        case pending  // "unknown" or null — not yet computed
     }
 
     struct Assignment: Equatable, Sendable {

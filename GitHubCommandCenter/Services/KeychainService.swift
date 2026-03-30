@@ -17,7 +17,7 @@ final class KeychainService: Sendable {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: serviceName,
-            kSecAttrAccount: accountName
+            kSecAttrAccount: accountName,
         ]
 
         let deleteStatus = SecItemDelete(query as CFDictionary)
@@ -38,7 +38,7 @@ final class KeychainService: Sendable {
             kSecAttrService: serviceName,
             kSecAttrAccount: accountName,
             kSecReturnData: true,
-            kSecMatchLimit: kSecMatchLimitOne
+            kSecMatchLimit: kSecMatchLimitOne,
         ]
 
         var result: AnyObject?
@@ -64,7 +64,7 @@ final class KeychainService: Sendable {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: serviceName,
-            kSecAttrAccount: accountName
+            kSecAttrAccount: accountName,
         ]
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
@@ -82,9 +82,9 @@ final class KeychainService: Sendable {
             switch self {
             case .decodingFailed:
                 return "Stored token data could not be decoded as UTF-8."
-            case .saveFailed(let s): return "Failed to save token (OSStatus \(s))"
-            case .loadFailed(let s): return "Failed to load token (OSStatus \(s))"
-            case .deleteFailed(let s): return "Failed to delete token (OSStatus \(s))"
+            case .saveFailed(let status): return "Failed to save token (OSStatus \(status))"
+            case .loadFailed(let status): return "Failed to load token (OSStatus \(status))"
+            case .deleteFailed(let status): return "Failed to delete token (OSStatus \(status))"
             }
         }
     }

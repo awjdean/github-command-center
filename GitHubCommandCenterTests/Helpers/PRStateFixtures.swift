@@ -1,4 +1,5 @@
 import Foundation
+
 @testable import GitHubCommandCenter
 
 extension PRState {
@@ -15,11 +16,15 @@ extension PRState {
         assignedToMe: Bool = false,
         updatedAt: Date = Date(timeIntervalSince1970: 1_743_321_600)
     ) -> PRState {
-        PRState(
+        let pullRequestURL =
+            URL(string: "https://github.com/\(repoFullName)/pull/\(number)")
+            ?? URL(filePath: "/")
+
+        return PRState(
             number: number,
             title: title,
             repoFullName: repoFullName,
-            url: URL(string: "https://github.com/\(repoFullName)/pull/\(number)")!,
+            url: pullRequestURL,
             headSHA: "abc123def456",
             draftStatus: draftStatus,
             ciStatus: ciStatus,

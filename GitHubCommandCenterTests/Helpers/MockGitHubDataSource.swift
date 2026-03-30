@@ -1,4 +1,5 @@
 import Foundation
+
 @testable import GitHubCommandCenter
 
 final class MockGitHubDataSource: GitHubDataSource {
@@ -13,7 +14,7 @@ final class MockGitHubDataSource: GitHubDataSource {
         validateTokenCallCount += 1
         switch validateTokenResult {
         case .success(let username): return username
-        case .failure(let error):   throw error
+        case .failure(let error): throw error
         }
     }
 
