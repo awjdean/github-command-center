@@ -1,39 +1,137 @@
-import ServiceManagement
 import SwiftUI
+
+enum PanelMode {
+    case pullRequests
+    case settings
+
+    var width: CGFloat {
+        360
+    }
+
+    var headerTitle: String {
+        switch self {
+        case .pullRequests: "GitHub Command Center"
+        case .settings: "Settings"
+        }
+    }
+
+    var showsBackButton: Bool {
+        self == .settings
+    }
+
+    var showsRefreshRow: Bool {
+        self == .pullRequests
+    }
+
+    var showsInlineAppControls: Bool {
+        self == .settings
+    }
+}
 
 struct PRListView: View {
     @EnvironmentObject var appState: AppState
-    @State private var launchAtLogin = (SMAppService.mainApp.status == .enabled)
+    @State private var panelMode: PanelMode
+
+    init(initialPanelMode: PanelMode = .pullRequests) {
+        _panelMode = State(initialValue: initialPanelMode)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             headerView
+            bannerSection
+            contentView
+            footerView
+        }
+        .frame(width: panelMode.width)
+        .background(Color.panelBackground)
+        .animation(.easeInOut(duration: 0.2), value: panelMode)
+        .onAppear {
+            appState.startPollingIfNeeded()
+        }
+    }
 
-            // Stale / rate-limit warning bar
-            if appState.isRateLimited {
-                warningBar(
-                    text: "Rate limited"
-                        + (appState.rateLimitResetDate.map {
-                            " — resets \(RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date()))"
-                        } ?? ""),
-                    color: .statusRed
-                )
-            } else if appState.isStale {
-                warningBar(
-                    text: "Data may be outdated — last update \(formattedLastUpdated)",
-                    color: .statusYellow
-                )
+    // MARK: - Header
+
+    private var headerView: some View {
+        HStack {
+            if panelMode.showsBackButton {
+                Button {
+                    panelMode = .pullRequests
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .imageScale(.small)
+                        .foregroundColor(.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Back")
             }
 
-            // Auth error banner
-            if case .failed = appState.authenticationStatus {
-                authErrorBanner
-            } else if case .noToken = appState.authenticationStatus {
-                noTokenBanner
+            VStack(alignment: .leading, spacing: 1) {
+                Text(panelMode.headerTitle)
+                    .font(.panelTitle)
+                    .foregroundColor(.textPrimary)
+                Text(panelSubtitle)
+                    .font(.panelSubtitle)
+                    .foregroundColor(.textTertiary)
             }
+            Spacer()
 
-            // Main content
-            ScrollView {
+            if panelMode == .pullRequests {
+                Button {
+                    panelMode = .settings
+                } label: {
+                    Image(systemName: "gear")
+                        .imageScale(.medium)
+                        .foregroundColor(.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Settings")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private var panelSubtitle: String {
+        switch panelMode {
+        case .pullRequests:
+            "\(appState.prs.count) open PR\(appState.prs.count == 1 ? "" : "s")"
+        case .settings:
+            "Authentication & app settings"
+        }
+    }
+
+    private var bannerSection: some View {
+        Group {
+            if panelMode == .pullRequests {
+                if appState.isRateLimited {
+                    warningBar(
+                        text: "Rate limited"
+                            + (appState.rateLimitResetDate.map {
+                                " — resets \(RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date()))"
+                            } ?? ""),
+                        color: .statusRed
+                    )
+                } else if appState.isStale {
+                    warningBar(
+                        text: "Data may be outdated — last update \(formattedLastUpdated)",
+                        color: .statusYellow
+                    )
+                }
+
+                if case .failed = appState.authenticationStatus {
+                    authErrorBanner
+                } else if case .noToken = appState.authenticationStatus {
+                    noTokenBanner
+                }
+            }
+        }
+    }
+
+    private var contentView: some View {
+        ScrollView {
+            if panelMode == .pullRequests {
                 LazyVStack(spacing: 0) {
                     switch appState.panelContentState {
                     case .loading:
@@ -50,7 +148,6 @@ struct PRListView: View {
                         prSections
                     }
 
-                    // Recently closed (transient)
                     if !appState.recentlyClosedPRs.isEmpty {
                         sectionHeader("RECENTLY CLOSED")
                         ForEach(appState.recentlyClosedPRs) { pr in
@@ -59,42 +156,12 @@ struct PRListView: View {
                         }
                     }
                 }
+            } else {
+                SettingsContentView(showsAppControls: panelMode.showsInlineAppControls)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxHeight: 400)
-
-            footerView
         }
-        .frame(width: 360)
-        .background(Color.panelBackground)
-        .onAppear {
-            launchAtLogin = (SMAppService.mainApp.status == .enabled)
-            appState.startPollingIfNeeded()
-        }
-    }
-
-    // MARK: - Header
-
-    private var headerView: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 1) {
-                Text("GitHub Command Center")
-                    .font(.panelTitle)
-                    .foregroundColor(.textPrimary)
-                Text("\(appState.prs.count) open PR\(appState.prs.count == 1 ? "" : "s")")
-                    .font(.panelSubtitle)
-                    .foregroundColor(.textTertiary)
-            }
-            Spacer()
-            SettingsLink {
-                Image(systemName: "gear")
-                    .imageScale(.medium)
-                    .foregroundColor(.textTertiary)
-            }
-            .buttonStyle(.plain)
-            .help("Settings")
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .frame(maxHeight: 400)
     }
 
     // MARK: - PR sections
@@ -235,7 +302,9 @@ struct PRListView: View {
                 .font(.footerText)
                 .foregroundColor(.textSecondary)
             Spacer()
-            SettingsLink {
+            Button {
+                panelMode = .settings
+            } label: {
                 Text(buttonLabel)
                     .font(.footerText)
                     .foregroundColor(.linkBlue)
@@ -265,65 +334,39 @@ struct PRListView: View {
     // MARK: - Footer
 
     private var footerView: some View {
-        VStack(spacing: 0) {
-            Divider().background(Color.textMuted.opacity(0.2))
-            HStack {
-                // Last updated + refresh
-                if appState.lastUpdated != nil {
-                    Text("Updated \(formattedLastUpdated)")
-                        .font(.footerText)
-                        .foregroundColor(.textMuted)
-                } else {
-                    Text(appState.isLoading ? "Loading…" : "Never updated")
-                        .font(.footerText)
-                        .foregroundColor(.textMuted)
-                }
+        Group {
+            if panelMode.showsRefreshRow {
+                VStack(spacing: 0) {
+                    Divider().background(Color.textMuted.opacity(0.2))
 
-                Spacer()
-
-                Button {
-                    appState.forceRefresh()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .imageScale(.small)
-                        .foregroundColor(.textTertiary)
-                }
-                .buttonStyle(.plain)
-                .help("Refresh (⌘R)")
-                .keyboardShortcut("r", modifiers: .command)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-
-            HStack {
-                Toggle("Launch at Login", isOn: $launchAtLogin)
-                    .font(.footerText)
-                    .foregroundColor(.textMuted)
-                    .toggleStyle(.checkbox)
-                    .onChange(of: launchAtLogin) { enabled in
-                        do {
-                            if enabled {
-                                try SMAppService.mainApp.register()
-                            } else {
-                                try SMAppService.mainApp.unregister()
-                            }
-                        } catch {
-                            // Silently revert if registration fails
-                            launchAtLogin = (SMAppService.mainApp.status == .enabled)
+                    HStack {
+                        if appState.lastUpdated != nil {
+                            Text("Updated \(formattedLastUpdated)")
+                                .font(.footerText)
+                                .foregroundColor(.textMuted)
+                        } else {
+                            Text(appState.isLoading ? "Loading…" : "Never updated")
+                                .font(.footerText)
+                                .foregroundColor(.textMuted)
                         }
+
+                        Spacer()
+
+                        Button {
+                            appState.forceRefresh()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .imageScale(.small)
+                                .foregroundColor(.textTertiary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Refresh (⌘R)")
+                        .keyboardShortcut("r", modifiers: .command)
                     }
-
-                Spacer()
-
-                Button("Quit") {
-                    NSApplication.shared.terminate(nil)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
                 }
-                .font(.footerText)
-                .foregroundColor(.textMuted)
-                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 10)
         }
     }
 
@@ -335,6 +378,67 @@ struct PRListView: View {
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
     }
+}
+
+// MARK: - Previews
+
+#Preview("PR Panel") {
+    PRListView()
+        .environmentObject(previewAppState(with: previewPRs))
+}
+
+#Preview("Settings Panel") {
+    PRListView(initialPanelMode: .settings)
+        .environmentObject(previewAppState())
+}
+
+@MainActor
+private func previewAppState(with prs: [PRState] = []) -> AppState {
+    let appState = AppState(
+        makePollingEngine: { _ in PreviewPollingController() },
+        requestNotificationPermission: {}
+    )
+    appState.isLoading = false
+    appState.prs = prs
+    appState.authenticationStatus = .noToken
+    return appState
+}
+
+private let previewPRs = [
+    PRState(
+        number: 12,
+        title: "Refine menu bar panel layout",
+        repoFullName: "awjdean/github-command-center",
+        url: URL("https://github.com/awjdean/github-command-center/pull/12"),
+        headSHA: "abc123",
+        draftStatus: .ready,
+        ciStatus: .failing(failingCheckNames: ["unit-tests"], totalChecks: 3),
+        reviewStatus: .changesRequested(by: ["octocat"]),
+        mergeStatus: .conflicts,
+        assignment: .init(createdByMe: true, reviewRequestedFromMe: false, assignedToMe: false),
+        updatedAt: .now
+    ),
+    PRState(
+        number: 34,
+        title: "Add inline settings screen",
+        repoFullName: "awjdean/github-command-center",
+        url: URL("https://github.com/awjdean/github-command-center/pull/34"),
+        headSHA: "def456",
+        draftStatus: .ready,
+        ciStatus: .passing,
+        reviewStatus: .requested(by: ["teammate"]),
+        mergeStatus: .ready,
+        assignment: .init(createdByMe: true, reviewRequestedFromMe: false, assignedToMe: false),
+        updatedAt: .now.addingTimeInterval(-3_600)
+    ),
+]
+
+@MainActor
+private final class PreviewPollingController: PollingControlling {
+    func start() {}
+    func stop() {}
+    func reset() {}
+    func forceRefresh() {}
 }
 
 // MARK: - Skeleton row

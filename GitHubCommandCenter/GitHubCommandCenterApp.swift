@@ -22,10 +22,5 @@ struct GitHubCommandCenterApp: App {
             MenuBarIconView(healthStatus: appState.healthStatus, prCount: appState.prs.count)
         }
         .menuBarExtraStyle(.window)
-
-        Settings {
-            SettingsView()
-                .environmentObject(appState)
-        }
     }
 }
