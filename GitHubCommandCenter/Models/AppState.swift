@@ -36,11 +36,7 @@ final class AppState: ObservableObject {
 
     var needsActionPRs: [PRState] {
         prs.filter { $0.triageCategory == .needsYourAction }
-            .sorted { lhs, rhs in
-                lhs.urgencyScore != rhs.urgencyScore
-                    ? lhs.urgencyScore > rhs.urgencyScore
-                    : lhs.updatedAt > rhs.updatedAt
-            }
+            .sorted(by: PRState.compareForNeedsAction)
     }
 
     var waitingOnOthersPRs: [PRState] {
@@ -78,6 +74,18 @@ final class AppState: ObservableObject {
 
     private var pollingEngine: PollingEngine?
 
+    private func clearPublishedSessionState() {
+        prs = []
+        recentlyClosedPRs = []
+        lastUpdated = nil
+        isLoading = true
+        error = nil
+        isRateLimited = false
+        rateLimitResetDate = nil
+        isStale = false
+        authenticationStatus = .unknown
+    }
+
     func startPollingIfNeeded() {
         guard pollingEngine == nil else { return }
         let engine = PollingEngine(appState: self)
@@ -99,22 +107,16 @@ final class AppState: ObservableObject {
     }
 
     func clearSessionStateForNewSession() {
-        prs = []
-        recentlyClosedPRs = []
-        lastUpdated = nil
-        isLoading = true
-        error = nil
-        isRateLimited = false
-        rateLimitResetDate = nil
-        isStale = false
-        authenticationStatus = .unknown
+        pollingEngine?.reset()
+        clearPublishedSessionState()
     }
 
     // Called by PollingEngine when token changes in Settings
     func resetPolling() {
+        pollingEngine?.reset()
         pollingEngine?.stop()
+        clearPublishedSessionState()
         pollingEngine = nil
-        clearSessionStateForNewSession()
         startPollingIfNeeded()
     }
 }
