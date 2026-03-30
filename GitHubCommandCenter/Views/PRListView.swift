@@ -42,6 +42,8 @@ struct PRListView: View {
                         setupStateView
                     case .authError:
                         authFailedStateView
+                    case .loadError:
+                        loadErrorStateView
                     case .empty:
                         emptyStateView
                     case .prList:
@@ -188,42 +190,61 @@ struct PRListView: View {
         .padding(.vertical, 40)
     }
 
+    private var loadErrorStateView: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 28))
+                .foregroundColor(.statusRed)
+            Text(appState.error?.errorDescription ?? "Unable to load pull requests right now.")
+                .font(.prTitle)
+                .foregroundColor(.textSecondary)
+                .multilineTextAlignment(.center)
+            Button("Retry") {
+                appState.forceRefresh()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 40)
+    }
+
     // MARK: - Error banners
 
     private var authErrorBanner: some View {
-        HStack {
-            Image(systemName: "exclamationmark.circle.fill")
-                .foregroundColor(.statusRed)
-            Text("Authentication failed")
-                .font(.footerText)
-                .foregroundColor(.textSecondary)
-            Spacer()
-            Button("Fix") { openSettings() }
-                .font(.footerText)
-                .foregroundColor(.linkBlue)
-                .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(Color.statusRed.opacity(0.15))
+        actionBanner(
+            icon: "exclamationmark.circle.fill",
+            text: "Authentication failed",
+            buttonLabel: "Fix",
+            color: .statusRed
+        )
     }
 
     private var noTokenBanner: some View {
+        actionBanner(
+            icon: "key.fill",
+            text: "Add a GitHub token to get started",
+            buttonLabel: "Add token",
+            color: .statusYellow
+        )
+    }
+
+    private func actionBanner(icon: String, text: String, buttonLabel: String, color: Color) -> some View {
         HStack {
-            Image(systemName: "key.fill")
-                .foregroundColor(.statusYellow)
-            Text("Add a GitHub token to get started")
+            Image(systemName: icon)
+                .foregroundColor(color)
+            Text(text)
                 .font(.footerText)
                 .foregroundColor(.textSecondary)
             Spacer()
-            Button("Add token") { openSettings() }
+            Button(buttonLabel) { openSettings() }
                 .font(.footerText)
                 .foregroundColor(.linkBlue)
                 .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color.statusYellow.opacity(0.15))
+        .background(color.opacity(0.15))
     }
 
     private func warningBar(text: String, color: Color) -> some View {
