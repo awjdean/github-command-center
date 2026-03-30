@@ -1,7 +1,13 @@
 import Foundation
 
 @MainActor
-final class PollingEngine {
+final class PollingEngine: PollingControlling {
+    enum PollOutcome: Equatable {
+        case useRegularInterval
+        case continueImmediately
+        case stopLoop
+    }
+
     private let appState: AppState
     private let recentlyClosedClearDelay: TimeInterval
     // Typed as the protocol so tests can inject a mock without touching Keychain
@@ -49,10 +55,18 @@ final class PollingEngine {
     // MARK: - Loop
 
     private func runLoop() async {
-        while !Task.isCancelled {
-            await poll()
+        pollingLoop: while !Task.isCancelled {
+            let outcome = await poll()
             guard !Task.isCancelled else { break }
-            try? await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
+
+            switch outcome {
+            case .useRegularInterval:
+                try? await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
+            case .continueImmediately:
+                continue pollingLoop
+            case .stopLoop:
+                break pollingLoop
+            }
         }
     }
 
@@ -69,39 +83,31 @@ final class PollingEngine {
     // MARK: - Poll
 
     // Internal so tests can call a single poll cycle directly
-    func poll() async {
+    @discardableResult
+    func poll() async -> PollOutcome {
         appState.recomputeStaleness()
+        defer { appState.recomputeStaleness() }
 
-        // Create REST client from Keychain token if none was injected
         if client == nil {
             let token: String?
             do {
                 token = try KeychainService.shared.loadToken()
             } catch {
-                appState.authenticationStatus = .failed
-                appState.error = .authError
-                appState.isLoading = false
-                appState.recomputeStaleness()
-                stop()
-                return
+                handleAuthFailure(status: .failed, error: .authError)
+                return .stopLoop
             }
 
             guard let token, !token.isEmpty else {
-                appState.authenticationStatus = .noToken
-                appState.error = .noToken
-                appState.isLoading = false
-                appState.recomputeStaleness()
-                stop()
-                return
+                handleAuthFailure(status: .noToken, error: .noToken)
+                return .stopLoop
             }
             client = GitHubRESTClient(token: token)
         }
-        guard let client else { return }
+        guard let client else { return .stopLoop }
 
         appState.isLoading = appState.prs.isEmpty
 
         do {
-            // Get username — validate once, then reuse
             let username: String
             if case .authenticated(let authenticatedUsername) = appState.authenticationStatus {
                 username = authenticatedUsername
@@ -112,13 +118,11 @@ final class PollingEngine {
 
             let newPRs = try await client.fetchAllPRStates(username: username)
 
-            // Detect PRs that disappeared from the open/involved search, then confirm closure.
             let disappeared = previousPRs.filter { prev in
                 !newPRs.contains { $0.id == prev.id }
             }
             let recentlyClosed = await client.resolveDisappearedPRs(disappeared)
 
-            // Fire transition notifications (skip on very first poll — no baseline yet)
             if !previousPRs.isEmpty {
                 NotificationService.shared.checkTransitions(
                     from: previousPRs,
@@ -127,7 +131,6 @@ final class PollingEngine {
                 )
             }
 
-            // Show recently closed for one poll cycle then clear
             appState.recentlyClosedPRs = recentlyClosed
             if !recentlyClosed.isEmpty {
                 clearRecentlyClosedTask?.cancel()
@@ -147,33 +150,25 @@ final class PollingEngine {
             if appState.isLoading { appState.isLoading = false }
             if appState.error != nil { appState.error = nil }
             if appState.isRateLimited { appState.isRateLimited = false }
-            appState.recomputeStaleness()
 
             previousPRs = newPRs
             consecutiveFailures = 0
+            return .useRegularInterval
 
         } catch AppError.authError {
-            appState.authenticationStatus = .failed
-            appState.error = .authError
-            appState.isLoading = false
-            appState.recomputeStaleness()
-            stop()
+            handleAuthFailure(status: .failed, error: .authError)
+            return .stopLoop
 
         } catch AppError.noToken {
-            appState.authenticationStatus = .noToken
-            appState.error = .noToken
-            appState.isLoading = false
-            appState.recomputeStaleness()
-            stop()
+            handleAuthFailure(status: .noToken, error: .noToken)
+            return .stopLoop
 
         } catch AppError.rateLimitExceeded(let resetAt) {
             appState.isRateLimited = true
             appState.rateLimitResetDate = resetAt
             appState.error = .rateLimitExceeded(resetAt: resetAt)
             appState.isLoading = false
-            appState.recomputeStaleness()
 
-            // Back off until rate limit resets
             let delay = max(resetAt.timeIntervalSinceNow + 5, 60)
             stop()
             pollingTask = Task {
@@ -181,21 +176,28 @@ final class PollingEngine {
                 appState.isRateLimited = false
                 await runLoop()
             }
+            return .stopLoop
 
         } catch AppError.incompleteSearchResults {
             appState.error = .incompleteSearchResults
             appState.isLoading = false
-            appState.recomputeStaleness()
+            return .useRegularInterval
 
         } catch {
             consecutiveFailures += 1
             appState.error = .networkError
             appState.isLoading = false
-            appState.recomputeStaleness()
-            // Exponential backoff capped at 60s
             let backoff = min(Double(2 << min(consecutiveFailures, 5)), 60.0)
             try? await Task.sleep(nanoseconds: UInt64(backoff * 1_000_000_000))
+            return .continueImmediately
         }
+    }
+
+    private func handleAuthFailure(status: AppState.AuthStatus, error: AppError) {
+        appState.authenticationStatus = status
+        appState.error = error
+        appState.isLoading = false
+        stop()
     }
 
 }

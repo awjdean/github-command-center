@@ -2,6 +2,14 @@ import Foundation
 import SwiftUI
 
 @MainActor
+protocol PollingControlling: AnyObject {
+    func start()
+    func stop()
+    func reset()
+    func forceRefresh()
+}
+
+@MainActor
 final class AppState: ObservableObject {
     @Published var prs: [PRState] = []
     @Published var recentlyClosedPRs: [PRState] = []  // Shown for one poll cycle
@@ -28,6 +36,7 @@ final class AppState: ObservableObject {
         case loading
         case setupRequired
         case authError
+        case loadError
         case empty
         case prList
     }
@@ -66,13 +75,31 @@ final class AppState: ObservableObject {
         case .failed:
             return .authError
         default:
+            if error != nil {
+                return .loadError
+            }
             return .empty
         }
     }
 
     // MARK: - Polling lifecycle (owned by AppState to keep wiring simple)
 
-    private var pollingEngine: PollingEngine?
+    private var pollingEngine: (any PollingControlling)?
+    private let makePollingEngine: (AppState) -> any PollingControlling
+    private let requestNotificationPermission: () async -> Void
+
+    init() {
+        self.makePollingEngine = { PollingEngine(appState: $0) }
+        self.requestNotificationPermission = { await NotificationService.shared.requestPermission() }
+    }
+
+    init(
+        makePollingEngine: @escaping (AppState) -> any PollingControlling,
+        requestNotificationPermission: @escaping () async -> Void
+    ) {
+        self.makePollingEngine = makePollingEngine
+        self.requestNotificationPermission = requestNotificationPermission
+    }
 
     private func clearPublishedSessionState() {
         prs = []
@@ -88,9 +115,10 @@ final class AppState: ObservableObject {
 
     func startPollingIfNeeded() {
         guard pollingEngine == nil else { return }
-        let engine = PollingEngine(appState: self)
+        let engine = makePollingEngine(self)
         pollingEngine = engine
-        Task { await NotificationService.shared.requestPermission() }
+        // Intentionally fire-and-forget: notification permission is non-fatal and should not block startup.
+        Task { await requestNotificationPermission() }
         engine.start()
     }
 

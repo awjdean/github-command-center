@@ -1,8 +1,18 @@
 import SwiftUI
 
 @main
+@MainActor
 struct GitHubCommandCenterApp: App {
-    @StateObject private var appState = AppState()
+    @StateObject private var appState: AppState
+
+    init() {
+        self.init(appState: AppState())
+    }
+
+    init(appState: AppState) {
+        _appState = StateObject(wrappedValue: appState)
+        appState.startPollingIfNeeded()
+    }
 
     var body: some Scene {
         MenuBarExtra {
