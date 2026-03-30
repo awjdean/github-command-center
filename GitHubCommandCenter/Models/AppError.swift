@@ -4,6 +4,7 @@ enum AppError: LocalizedError, Sendable, Equatable {
     case authError
     case incompleteSearchResults
     case noToken
+    case paginationLimitExceeded
     case rateLimitExceeded(resetAt: Date)
     case networkError
     case serverError(statusCode: Int)
@@ -16,10 +17,14 @@ enum AppError: LocalizedError, Sendable, Equatable {
             return "GitHub search returned incomplete results. Try again later or narrow the search."
         case .noToken:
             return "No GitHub token configured."
+        case .paginationLimitExceeded:
+            return "GitHub pagination exceeded the safe page limit. Try again later."
         case .rateLimitExceeded(let date):
             let formatter = RelativeDateTimeFormatter()
             formatter.unitsStyle = .full
-            return "Rate limited — next update \(formatter.localizedString(for: date, relativeTo: Date()))"
+            let nextUpdate = formatter.localizedString(for: date, relativeTo: Date())
+            return
+                "Rate limited — next update \(nextUpdate)"
         case .networkError:
             return "Network connection failed."
         case .serverError(let code):

@@ -1,6 +1,9 @@
 import Foundation
 
 actor GitHubRESTClient: GitHubDataSource {
+    private static let searchResultsMaxPageLimit = 100
+    private static let reviewMaxPageLimit = 10
+
     private enum RequestError: Error {
         case app(AppError)
         case statusCode(Int)
@@ -73,6 +76,9 @@ actor GitHubRESTClient: GitHubDataSource {
         var page = 1
 
         while true {
+            guard page <= Self.searchResultsMaxPageLimit else {
+                throw AppError.paginationLimitExceeded
+            }
             let query = "is:pr is:open involves:\(username)"
             guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
                 throw AppError.networkError
@@ -162,6 +168,10 @@ actor GitHubRESTClient: GitHubDataSource {
         var reviews: [Review] = []
 
         while true {
+            // Cap pagination for long-lived PRs so review fetching stays bounded.
+            guard page <= Self.reviewMaxPageLimit else {
+                return reviews
+            }
             let data = try await get("/repos/\(owner)/\(repo)/pulls/\(number)/reviews?per_page=\(perPage)&page=\(page)")
             let pageReviews = try decode([Review].self, from: data)
             reviews.append(contentsOf: pageReviews)
