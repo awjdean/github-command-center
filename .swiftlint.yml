@@ -60,13 +60,9 @@ identifier_name:
   min_length:
     warning: 2
     error: 1
-  excluded:
-    - id
-    - x
-    - y
-    - i
-    - j
-    - k
+  # Keep global exclusions empty. For legitimate API-shaped short names such as `id`,
+  # use scoped inline disables instead; do not add generic shortcuts like id/x/y/i/j/k here.
+  excluded: []
 
 nesting:
   type_level:

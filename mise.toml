@@ -75,7 +75,7 @@ run = [
 
 [tasks.check]
 description = "Run all checks"
-depends = ["check-style", "test"]
+depends = ["sync", "check-style", "test"]
 
 [tasks.fix]
 description = "Fix all formatting + lint issues"
