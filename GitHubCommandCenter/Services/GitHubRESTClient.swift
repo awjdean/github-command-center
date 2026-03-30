@@ -10,6 +10,7 @@ actor GitHubRESTClient: GitHubDataSource {
     private var coreRateLimitRemaining = 5000
     private var searchRateLimitRemaining = 30
     private var coreRateLimitResetDate = Date()
+    private var searchRateLimitResetDate = Date()
 
     init(token: String, session: URLSession = .shared) {
         self.token = token
@@ -80,6 +81,9 @@ actor GitHubRESTClient: GitHubDataSource {
             let path = "/search/issues?q=\(encoded)&per_page=\(perPage)&page=\(page)&sort=updated&order=desc"
             let data = try await get(path, rateLimit: .search)
             let response = try decode(SearchResponse.self, from: data)
+            if response.incompleteResults {
+                throw AppError.incompleteSearchResults
+            }
 
             allItems.append(contentsOf: response.items)
             if allItems.count >= response.totalCount || response.items.count < perPage { break }
@@ -281,7 +285,11 @@ actor GitHubRESTClient: GitHubDataSource {
 
     private enum RateLimitBucket { case core, search }
 
-    private func get(_ path: String, rateLimit: RateLimitBucket = .core) async throws -> Data {
+    private func get(
+        _ path: String,
+        rateLimit: RateLimitBucket = .core,
+        allowRetryWithoutETag: Bool = true
+    ) async throws -> Data {
         guard let url = URL(string: "https://api.github.com\(path)") else {
             throw AppError.networkError
         }
@@ -315,7 +323,17 @@ actor GitHubRESTClient: GitHubDataSource {
             return data
         case 304:
             if let cached = cachedResponses[url] { return cached }
-            throw AppError.networkError
+            guard allowRetryWithoutETag else { throw AppError.networkError }
+
+            let previousETag = etags.removeValue(forKey: url)
+            do {
+                return try await get(path, rateLimit: rateLimit, allowRetryWithoutETag: false)
+            } catch {
+                if let previousETag, etags[url] == nil {
+                    etags[url] = previousETag
+                }
+                throw error
+            }
         case 401:
             throw AppError.authError
         case 403:
@@ -341,7 +359,11 @@ actor GitHubRESTClient: GitHubDataSource {
             }
         }
         if let resetTS = response.value(forHTTPHeaderField: "X-RateLimit-Reset").flatMap(TimeInterval.init) {
-            coreRateLimitResetDate = Date(timeIntervalSince1970: resetTS)
+            let resetDate = Date(timeIntervalSince1970: resetTS)
+            switch bucket {
+            case .core:   coreRateLimitResetDate = resetDate
+            case .search: searchRateLimitResetDate = resetDate
+            }
         }
     }
 
@@ -421,6 +443,7 @@ actor GitHubRESTClient: GitHubDataSource {
 
     private struct SearchResponse: Codable, Sendable {
         let totalCount: Int
+        let incompleteResults: Bool
         let items: [SearchItem]
     }
 
