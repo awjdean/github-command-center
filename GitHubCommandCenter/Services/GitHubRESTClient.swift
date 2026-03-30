@@ -1,6 +1,6 @@
 import Foundation
 
-final class GitHubRESTClient: GitHubDataSource {
+actor GitHubRESTClient: GitHubDataSource {
     private let token: String
     private let session: URLSession
     private var etags: [URL: String] = [:]
@@ -24,11 +24,19 @@ final class GitHubRESTClient: GitHubDataSource {
         return user.login
     }
 
+    func validateTokenForAppAccess() async throws -> String {
+        let username = try await validateToken()
+        _ = try await searchOpenPRs(username: username, perPage: 1)
+        return username
+    }
+
     func fetchAllPRStates(username: String) async throws -> [PRState] {
         let searchItems = try await searchOpenPRs(username: username)
         return try await withThrowingTaskGroup(of: PRState?.self) { group in
             for item in searchItems {
-                group.addTask { try await self.buildPRState(from: item, username: username) }
+                group.addTask { [self] in
+                    try await buildPRState(from: item, username: username)
+                }
             }
             var results: [PRState] = []
             for try await state in group {
@@ -38,12 +46,31 @@ final class GitHubRESTClient: GitHubDataSource {
         }
     }
 
+    func resolveDisappearedPRs(_ prs: [PRState]) async -> [PRState] {
+        guard !prs.isEmpty else { return [] }
+
+        return await withTaskGroup(of: PRState?.self) { group in
+            for pr in prs {
+                group.addTask { [self] in
+                    await confirmedClosedPR(pr)
+                }
+            }
+
+            var confirmedClosed: [PRState] = []
+            for await pr in group {
+                if let pr {
+                    confirmedClosed.append(pr)
+                }
+            }
+            return confirmedClosed
+        }
+    }
+
     // MARK: - Search
 
-    private func searchOpenPRs(username: String) async throws -> [SearchItem] {
+    private func searchOpenPRs(username: String, perPage: Int = 100) async throws -> [SearchItem] {
         var allItems: [SearchItem] = []
         var page = 1
-        let perPage = 100
 
         while true {
             let q = "is:pr is:open involves:\(username)"
@@ -65,11 +92,8 @@ final class GitHubRESTClient: GitHubDataSource {
     // MARK: - PR state building
 
     private func buildPRState(from item: SearchItem, username: String) async throws -> PRState? {
-        guard let repoFullName = extractRepoName(from: item.repositoryUrl) else { return nil }
-        let parts = repoFullName.split(separator: "/")
-        guard parts.count == 2 else { return nil }
-        let owner = String(parts[0])
-        let repo = String(parts[1])
+        guard let repoFullName = extractRepoName(from: item.repositoryUrl),
+              let (owner, repo) = splitRepoFullName(repoFullName) else { return nil }
         let number = item.number
 
         // Fetch PR detail, reviews, and check runs concurrently
@@ -77,7 +101,9 @@ final class GitHubRESTClient: GitHubDataSource {
         async let reviewsTask = fetchReviews(owner: owner, repo: repo, number: number)
         let (detail, reviews) = try await (detailTask, reviewsTask)
 
-        let checkRuns = try await fetchCheckRuns(owner: owner, repo: repo, sha: detail.head.sha)
+        async let checkRunsTask = fetchCheckRuns(owner: owner, repo: repo, sha: detail.head.sha)
+        async let commitStatusesTask = fetchCommitStatuses(owner: owner, repo: repo, sha: detail.head.sha)
+        let (checkRuns, commitStatuses) = try await (checkRunsTask, commitStatusesTask)
 
         let assignment = PRState.Assignment(
             createdByMe: detail.user.login == username,
@@ -85,21 +111,18 @@ final class GitHubRESTClient: GitHubDataSource {
             assignedToMe: detail.assignees.contains { $0.login == username }
         )
 
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let updatedAt = iso.date(from: item.updatedAt) ?? Date()
+        let updatedAt = Self.parseGitHubDate(item.updatedAt) ?? Date()
 
         guard let prURL = URL(string: item.htmlUrl) else { return nil }
 
         return PRState(
-            id: number,
             number: number,
             title: item.title,
             repoFullName: repoFullName,
             url: prURL,
             headSHA: detail.head.sha,
             draftStatus: item.draft == true ? .draft : .ready,
-            ciStatus: buildCIStatus(from: checkRuns),
+            ciStatus: buildCIStatus(from: checkRuns, commitStatuses: commitStatuses.statuses, combinedStatusState: commitStatuses.state),
             reviewStatus: buildReviewStatus(reviews: reviews, requestedReviewers: detail.requestedReviewers),
             mergeStatus: buildMergeStatus(from: detail.mergeableState),
             assignment: assignment,
@@ -107,12 +130,17 @@ final class GitHubRESTClient: GitHubDataSource {
         )
     }
 
-    private func fetchPRDetail(owner: String, repo: String, number: Int) async throws -> PRDetail {
+    private func fetchPRDetail(
+        owner: String,
+        repo: String,
+        number: Int,
+        retryForMergeability: Bool = true
+    ) async throws -> PRDetail {
         let data = try await get("/repos/\(owner)/\(repo)/pulls/\(number)")
         var detail = try decode(PRDetail.self, from: data)
 
         // GitHub's mergeable field may be null while being computed — retry once after a delay
-        if detail.mergeableState == nil {
+        if retryForMergeability, detail.mergeableState == nil {
             try await Task.sleep(nanoseconds: 2_500_000_000)
             let retryData = try await get("/repos/\(owner)/\(repo)/pulls/\(number)")
             detail = try decode(PRDetail.self, from: retryData)
@@ -121,8 +149,21 @@ final class GitHubRESTClient: GitHubDataSource {
     }
 
     private func fetchReviews(owner: String, repo: String, number: Int) async throws -> [Review] {
-        let data = try await get("/repos/\(owner)/\(repo)/pulls/\(number)/reviews")
-        return try decode([Review].self, from: data)
+        let perPage = 100
+        var page = 1
+        var reviews: [Review] = []
+
+        while true {
+            let data = try await get("/repos/\(owner)/\(repo)/pulls/\(number)/reviews?per_page=\(perPage)&page=\(page)")
+            let pageReviews = try decode([Review].self, from: data)
+            reviews.append(contentsOf: pageReviews)
+
+            if pageReviews.count < perPage {
+                return reviews
+            }
+
+            page += 1
+        }
     }
 
     private func fetchCheckRuns(owner: String, repo: String, sha: String) async throws -> [CheckRun] {
@@ -131,23 +172,55 @@ final class GitHubRESTClient: GitHubDataSource {
         return response.checkRuns
     }
 
+    private func fetchCommitStatuses(owner: String, repo: String, sha: String) async throws -> CombinedStatusResponse {
+        let data = try await get("/repos/\(owner)/\(repo)/commits/\(sha)/status")
+        return try decode(CombinedStatusResponse.self, from: data)
+    }
+
+    private func confirmedClosedPR(_ pr: PRState) async -> PRState? {
+        guard let (owner, repo) = splitRepoFullName(pr.repoFullName) else {
+            return nil
+        }
+
+        do {
+            let detail = try await fetchPRDetail(
+                owner: owner,
+                repo: repo,
+                number: pr.number,
+                retryForMergeability: false
+            )
+            return detail.state == "closed" ? pr : nil
+        } catch {
+            return nil
+        }
+    }
+
     // MARK: - State builders
 
-    private func buildCIStatus(from checkRuns: [CheckRun]) -> PRState.CIStatus {
-        guard !checkRuns.isEmpty else { return .none }
+    private func buildCIStatus(
+        from checkRuns: [CheckRun],
+        commitStatuses: [CommitStatus],
+        combinedStatusState: String
+    ) -> PRState.CIStatus {
+        let latestStatuses = deduplicatedCommitStatuses(commitStatuses)
+        let totalChecks = checkRuns.count + latestStatuses.count
+        guard totalChecks > 0 else { return .none }
 
         let hasPending = checkRuns.contains { $0.status != "completed" }
-        if hasPending { return .pending }
+        let hasPendingCommitStatus = combinedStatusState == "pending" || latestStatuses.contains { $0.state == "pending" }
+        if hasPending || hasPendingCommitStatus { return .pending }
 
-        let failing = checkRuns.filter { run in
+        let failingCheckRuns = checkRuns.filter { run in
             run.status == "completed" &&
             run.conclusion != "success" &&
             run.conclusion != "skipped" &&
             run.conclusion != "neutral"
         }
+        let failingCommitStatuses = latestStatuses.filter { ["error", "failure"].contains($0.state) }
 
-        if failing.isEmpty { return .passing }
-        return .failing(failingCheckNames: failing.map(\.name), totalChecks: checkRuns.count)
+        let failingNames = failingCheckRuns.map(\.name) + failingCommitStatuses.map(\.context)
+        if failingNames.isEmpty { return .passing }
+        return .failing(failingCheckNames: failingNames, totalChecks: totalChecks)
     }
 
     private func buildReviewStatus(reviews: [Review], requestedReviewers: [GitHubUser]) -> PRState.ReviewStatus {
@@ -166,15 +239,17 @@ final class GitHubRESTClient: GitHubDataSource {
             return .changesRequested(by: who)
         }
 
+        if !requestedReviewers.isEmpty {
+            // Outstanding review requests should keep the PR in a "waiting for review"
+            // state even if it already has older approvals.
+            return .requested(by: requestedReviewers.map(\.login))
+        }
+
         if states.contains("APPROVED") {
             let who = latestByReviewer.values
                 .filter { $0.state == "APPROVED" }
                 .map(\.user.login)
             return .approved(by: who)
-        }
-
-        if !requestedReviewers.isEmpty {
-            return .requested(by: requestedReviewers.map(\.login))
         }
 
         return .none
@@ -188,6 +263,18 @@ final class GitHubRESTClient: GitHubDataSource {
         case "unstable": return .ready   // mergeable despite failing checks; CI tracked separately
         default:         return .pending // "unknown", nil, or any future undocumented value
         }
+    }
+
+    private func deduplicatedCommitStatuses(_ statuses: [CommitStatus]) -> [CommitStatus] {
+        var seenContexts = Set<String>()
+        var latestStatuses: [CommitStatus] = []
+
+        for status in statuses {
+            guard seenContexts.insert(status.context).inserted else { continue }
+            latestStatuses.append(status)
+        }
+
+        return latestStatuses
     }
 
     // MARK: - HTTP
@@ -229,7 +316,12 @@ final class GitHubRESTClient: GitHubDataSource {
         case 304:
             if let cached = cachedResponses[url] { return cached }
             throw AppError.networkError
-        case 401, 403:
+        case 401:
+            throw AppError.authError
+        case 403:
+            if isRateLimitedResponse(data, http) {
+                throw AppError.rateLimitExceeded(resetAt: rateLimitResetDate(from: http))
+            }
             throw AppError.authError
         case 429:
             let resetAt = rateLimitResetDate(from: http)
@@ -260,6 +352,22 @@ final class GitHubRESTClient: GitHubDataSource {
         return Date().addingTimeInterval(60)
     }
 
+    private func isRateLimitedResponse(_ data: Data, _ response: HTTPURLResponse) -> Bool {
+        if response.value(forHTTPHeaderField: "Retry-After") != nil {
+            return true
+        }
+
+        if response.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0" {
+            return true
+        }
+
+        guard let apiError = try? decode(APIErrorResponse.self, from: data) else {
+            return false
+        }
+
+        return apiError.message.localizedCaseInsensitiveContains("rate limit")
+    }
+
     private func extractRepoName(from repositoryURL: String) -> String? {
         guard let url = URL(string: repositoryURL) else { return nil }
         let components = url.pathComponents
@@ -269,24 +377,54 @@ final class GitHubRESTClient: GitHubDataSource {
         return "\(components[reposIdx + 1])/\(components[reposIdx + 2])"
     }
 
-    private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+    private func splitRepoFullName(_ repoFullName: String) -> (String, String)? {
+        let parts = repoFullName.split(separator: "/", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return nil }
+        return (parts[0], parts[1])
+    }
+
+    private static let fractionalDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let internetDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static func parseGitHubDate(_ value: String) -> Date? {
+        fractionalDateFormatter.date(from: value) ?? internetDateFormatter.date(from: value)
+    }
+
+    private static let jsonDecoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(type, from: data)
+        return decoder
+    }()
+
+    private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        try Self.jsonDecoder.decode(type, from: data)
     }
 
     // MARK: - API response models
 
-    private struct GitHubUser: Codable {
+    private struct APIErrorResponse: Codable, Sendable {
+        let message: String
+    }
+
+    private struct GitHubUser: Codable, Sendable {
         let login: String
     }
 
-    private struct SearchResponse: Codable {
+    private struct SearchResponse: Codable, Sendable {
         let totalCount: Int
         let items: [SearchItem]
     }
 
-    private struct SearchItem: Codable {
+    private struct SearchItem: Codable, Sendable {
         let number: Int
         let title: String
         let htmlUrl: String
@@ -295,30 +433,41 @@ final class GitHubRESTClient: GitHubDataSource {
         let repositoryUrl: String
     }
 
-    private struct PRDetail: Codable {
+    private struct PRDetail: Codable, Sendable {
         let head: Head
+        let state: String
         let user: GitHubUser
         let assignees: [GitHubUser]
         let requestedReviewers: [GitHubUser]
         let mergeableState: String?
 
-        struct Head: Codable {
+        struct Head: Codable, Sendable {
             let sha: String
         }
     }
 
-    private struct Review: Codable {
+    private struct Review: Codable, Sendable {
         let user: GitHubUser
         let state: String
     }
 
-    private struct CheckRunsResponse: Codable {
+    private struct CheckRunsResponse: Codable, Sendable {
         let checkRuns: [CheckRun]
     }
 
-    private struct CheckRun: Codable {
+    private struct CheckRun: Codable, Sendable {
         let name: String
         let status: String
         let conclusion: String?
+    }
+
+    private struct CombinedStatusResponse: Codable, Sendable {
+        let state: String
+        let statuses: [CommitStatus]
+    }
+
+    private struct CommitStatus: Codable, Sendable {
+        let context: String
+        let state: String
     }
 }
