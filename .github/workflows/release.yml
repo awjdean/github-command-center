@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-15
@@ -24,14 +27,15 @@ jobs:
       - name: Create .zip for distribution
         run: |
           SEARCH_DIR="build/DerivedData"
-          APP_PATH=$(find "$SEARCH_DIR" -name "GitHubCommandCenter.app" -type d | head -1)
-          if [ -z "$APP_PATH" ]; then
-            echo "App bundle not found in $SEARCH_DIR (APP_PATH is empty)"
+          APP_NAME="GitHubCommandCenter.app"
+          APP_PATH="$SEARCH_DIR/Build/Products/Release/$APP_NAME"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "App bundle not found at $APP_PATH"
             exit 1
           fi
           echo "Found app at: $APP_PATH"
           cp -R "$APP_PATH" .
-          zip -r "GitHubCommandCenter-${{ github.ref_name }}.zip" GitHubCommandCenter.app
+          zip -r "GitHubCommandCenter-${{ github.ref_name }}.zip" "$APP_NAME"
           # Strip quarantine metadata note from README context
           echo "To install: unzip, move to /Applications, then right-click > Open on first launch (unsigned build)."
 

@@ -16,6 +16,19 @@ jobs:
         with:
           install: true
 
+      - name: Cache SwiftPM and DerivedData
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/org.swift.swiftpm
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData
+            build/DerivedData
+            .build
+          key: ${{ runner.os }}-swiftpm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-swiftpm-
+
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.app
 
