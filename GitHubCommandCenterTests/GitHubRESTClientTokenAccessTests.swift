@@ -4,7 +4,7 @@ import Testing
 @testable import GitHubCommandCenter
 
 extension GitHubRESTClientTests {
-    private func userReposPageMatcher(page: Int) -> (URL) -> Bool {
+    private func userReposPageMatcher(page: Int) -> @Sendable (URL) -> Bool {
         { url in
             guard url.path == "/user/repos" else { return false }
             let queryItems = Set(

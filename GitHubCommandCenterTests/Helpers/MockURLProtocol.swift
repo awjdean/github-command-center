@@ -9,14 +9,14 @@ final class MockURLProtocol: URLProtocol {
         case invalidResponse(url: URL)
     }
 
-    private struct Handler {
+    private struct Handler: Sendable {
         let description: String
-        let matches: (URL) -> Bool
+        let matches: @Sendable (URL) -> Bool
         let response: MockResponse
         let persistent: Bool
     }
 
-    struct MockResponse {
+    struct MockResponse: Sendable {
         let data: Data
         let statusCode: Int
         let headers: [String: String]
@@ -86,7 +86,7 @@ final class MockURLProtocol: URLProtocol {
         persistent: Bool = false,
         statusCode: Int = 200,
         headers: [String: String] = [:],
-        matching matcher: @escaping (URL) -> Bool,
+        matching matcher: @escaping @Sendable (URL) -> Bool,
         json: Any
     ) {
         let data: Data
@@ -113,7 +113,7 @@ final class MockURLProtocol: URLProtocol {
         persistent: Bool = false,
         statusCode: Int,
         headers: [String: String] = [:],
-        matching matcher: @escaping (URL) -> Bool
+        matching matcher: @escaping @Sendable (URL) -> Bool
     ) {
         let handler = Handler(
             description: description,
