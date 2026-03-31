@@ -11,6 +11,8 @@ final class PollingEngine: PollingControlling {
 
     private let appState: AppState
     private let recentlyClosedClearDelay: TimeInterval
+    private let loadToken: @Sendable () throws -> String?
+    private let sleep: @Sendable (TimeInterval) async -> Void
     private static let logger = Logger(subsystem: Log.subsystem, category: "PollingEngine")
     private(set) var client: (any GitHubDataSource)?
     private var pollingTask: Task<Void, Never>?
@@ -22,11 +24,17 @@ final class PollingEngine: PollingControlling {
     init(
         appState: AppState,
         dataSource: (any GitHubDataSource)? = nil,
-        recentlyClosedClearDelay: TimeInterval = 5
+        recentlyClosedClearDelay: TimeInterval = 5,
+        loadToken: @escaping @Sendable () throws -> String? = { try KeychainService.shared.loadToken() },
+        sleep: @escaping @Sendable (TimeInterval) async -> Void = { interval in
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
     ) {
         self.appState = appState
         self.client = dataSource
         self.recentlyClosedClearDelay = recentlyClosedClearDelay
+        self.loadToken = loadToken
+        self.sleep = sleep
     }
 
     func start() {
@@ -91,12 +99,19 @@ final class PollingEngine: PollingControlling {
 
         if client == nil {
             do {
-                let token = try KeychainService.shared.loadToken()
+                let token = try loadToken()
                 guard let token, !token.isEmpty else {
                     await handleAuthFailure(status: .noToken, error: .noToken, context: &context)
                     return .stopLoop
                 }
                 client = GitHubRESTClient(token: token)
+            } catch let error as KeychainService.KeychainError {
+                let errorDescription = error.localizedDescription
+                Self.logger.error(
+                    "Failed to load token from keychain before polling: \(errorDescription, privacy: .public)"
+                )
+                await handleAuthFailure(status: .unknown, error: .keychainError, context: &context)
+                return .stopLoop
             } catch {
                 Self.logger.error(
                     "Failed to load token from keychain before polling: \(String(describing: error), privacy: .public)"
@@ -157,6 +172,9 @@ final class PollingEngine: PollingControlling {
             case .authError:
                 await handleAuthFailure(status: .failed, error: .authError, context: &context)
                 return .stopLoop
+            case .keychainError:
+                await handleAuthFailure(status: .unknown, error: .keychainError, context: &context)
+                return .stopLoop
             case .noToken:
                 await handleAuthFailure(status: .noToken, error: .noToken, context: &context)
                 return .stopLoop
@@ -195,7 +213,7 @@ final class PollingEngine: PollingControlling {
         let delay = min(max(rateLimit.resetAt.timeIntervalSinceNow + 5, 60), 3600)
         stop()
         pollingTask = Task {
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            await self.sleep(delay)
             guard !Task.isCancelled else { return }
 
             var recoveryContext = await self.appState.currentPollContext()
@@ -223,8 +241,9 @@ final class PollingEngine: PollingControlling {
         consecutiveFailures += 1
         await applyPollingError(error, context: &context)
 
-        let backoff = min(Double(2 << min(consecutiveFailures, 5)), 60.0)
-        try? await Task.sleep(nanoseconds: UInt64(backoff * 1_000_000_000))
+        let zeroBasedFailureCount = max(consecutiveFailures - 1, 0)
+        let backoff = min(pow(2, Double(zeroBasedFailureCount + 1)), 60.0)
+        await sleep(backoff)
         return .continueImmediately
     }
 
@@ -245,8 +264,7 @@ final class PollingEngine: PollingControlling {
         clearRecentlyClosedTask = Task { [weak self] in
             guard let self else { return }
 
-            let delay = UInt64(self.recentlyClosedClearDelay * 1_000_000_000)
-            try? await Task.sleep(nanoseconds: delay)
+            await self.sleep(self.recentlyClosedClearDelay)
             guard !Task.isCancelled else { return }
 
             await self.appState.clearRecentlyClosedPRs()

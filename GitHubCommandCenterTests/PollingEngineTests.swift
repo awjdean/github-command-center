@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import Testing
 
 @testable import GitHubCommandCenter
@@ -6,17 +7,48 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct PollingEngineTests {
+    private actor SleepRecorder {
+        private var intervals: [TimeInterval] = []
+
+        func record(_ interval: TimeInterval) {
+            intervals.append(interval)
+        }
+
+        func recordedIntervals() -> [TimeInterval] {
+            intervals
+        }
+    }
+
     @MainActor
     private final class Harness {
         let appState = AppState()
         let mockSource = MockGitHubDataSource()
         let engine: PollingEngine
 
-        init(recentlyClosedClearDelay: TimeInterval = 5) {
+        init(
+            recentlyClosedClearDelay: TimeInterval = 5,
+            dataSource: (any GitHubDataSource)? = nil,
+            useMockSource: Bool = true,
+            loadToken: @escaping @Sendable () throws -> String? = {
+                try KeychainService.shared.loadToken()
+            },
+            sleep: (@Sendable (TimeInterval) async -> Void)? = nil
+        ) {
+            let resolvedDataSource: (any GitHubDataSource)?
+            if useMockSource {
+                resolvedDataSource = dataSource ?? mockSource
+            } else {
+                resolvedDataSource = dataSource
+            }
+
             engine = PollingEngine(
                 appState: appState,
-                dataSource: mockSource,
-                recentlyClosedClearDelay: recentlyClosedClearDelay
+                dataSource: resolvedDataSource,
+                recentlyClosedClearDelay: recentlyClosedClearDelay,
+                loadToken: loadToken,
+                sleep: sleep ?? { interval in
+                    try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                }
             )
         }
     }
@@ -163,7 +195,7 @@ struct PollingEngineTests {
 
     @Test
     func poll_consecutiveSuccesses_resetsFailureCount() async {
-        let harness = Harness()
+        let harness = Harness(sleep: { _ in })
         harness.mockSource.fetchResult = .failure(AppError.networkError)
         await harness.engine.poll()
 
@@ -189,7 +221,7 @@ struct PollingEngineTests {
 
     @Test
     func poll_networkError_setsNetworkError() async {
-        let harness = Harness()
+        let harness = Harness(sleep: { _ in })
         harness.mockSource.validateTokenResult = .success("octocat")
         harness.mockSource.fetchResult = .failure(AppError.networkError)
 
@@ -200,18 +232,22 @@ struct PollingEngineTests {
 
     @Test
     func poll_networkError_requestsImmediateRetryAfterBackoff() async {
-        let harness = Harness()
+        let sleepRecorder = SleepRecorder()
+        let harness = Harness(sleep: { interval in
+            await sleepRecorder.record(interval)
+        })
         harness.mockSource.validateTokenResult = .success("octocat")
         harness.mockSource.fetchResult = .failure(AppError.networkError)
 
         let outcome = await harness.engine.poll()
 
         #expect(outcome == .continueImmediately)
+        #expect(await sleepRecorder.recordedIntervals() == [2])
     }
 
     @Test
     func poll_serverError_preservesErrorAndRequestsImmediateRetryAfterBackoff() async {
-        let harness = Harness()
+        let harness = Harness(sleep: { _ in })
         harness.mockSource.validateTokenResult = .success("octocat")
         harness.mockSource.fetchResult = .failure(AppError.serverError(statusCode: 500))
 
@@ -246,6 +282,24 @@ struct PollingEngineTests {
         if case .rateLimitExceeded = harness.appState.error {
         } else {
             Issue.record("Expected rateLimitExceeded error")
+        }
+    }
+
+    @Test
+    func poll_keychainLoadFailure_setsKeychainErrorWithoutPretendingAuthFailed() async {
+        let harness = Harness(
+            dataSource: nil,
+            useMockSource: false,
+            loadToken: { throw KeychainService.KeychainError.loadFailed(status: errSecInteractionNotAllowed) }
+        )
+
+        let outcome = await harness.engine.poll()
+
+        #expect(outcome == .stopLoop)
+        #expect(harness.appState.error == .keychainError)
+        if case .unknown = harness.appState.authenticationStatus {
+        } else {
+            Issue.record("Expected authentication status to stay .unknown")
         }
     }
 
@@ -341,7 +395,7 @@ struct PollingEngineTests {
         #expect(harness.mockSource.lastResolvedDisappearedInput.isEmpty)
     }
 
-    @Test
+    @Test(.timeLimit(.minutes(1)))
     func reset_cancelsRecentlyClosedClearTask() async {
         let harness = Harness(recentlyClosedClearDelay: 0.05)
         let pr = PRState.fixture(number: 99)
@@ -358,14 +412,7 @@ struct PollingEngineTests {
         var recentlyClosedWasCleared = false
 
         await confirmation("recently closed PRs stay visible after reset") { confirmation in
-            let deadline = DispatchTime.now().uptimeNanoseconds + 300_000_000
-            while DispatchTime.now().uptimeNanoseconds < deadline {
-                if harness.appState.recentlyClosedPRs.isEmpty {
-                    recentlyClosedWasCleared = true
-                    break
-                }
-                try? await Task.sleep(nanoseconds: 10_000_000)
-            }
+            recentlyClosedWasCleared = harness.appState.recentlyClosedPRs.isEmpty
             confirmation()
         }
 
@@ -423,7 +470,7 @@ struct PollingEngineTests {
 
     @Test
     func poll_networkError_withOldLastUpdated_marksStateStale() async {
-        let harness = Harness()
+        let harness = Harness(sleep: { _ in })
         harness.appState.lastUpdated = Date().addingTimeInterval(-301)
         harness.mockSource.validateTokenResult = .success("octocat")
         harness.mockSource.fetchResult = .failure(AppError.networkError)
