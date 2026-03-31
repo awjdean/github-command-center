@@ -3,11 +3,12 @@ import Foundation
 enum AppError: LocalizedError, Sendable, Equatable {
     struct RateLimitContext: Sendable, Equatable {
         let resetAt: Date
-        let nextUpdateDescription: String
+        var nextUpdateDescription: String {
+            resetAt.formatted(.relative(presentation: .named, unitsStyle: .wide))
+        }
 
         init(resetAt: Date) {
             self.resetAt = resetAt
-            nextUpdateDescription = resetAt.formatted(.relative(presentation: .named, unitsStyle: .wide))
         }
 
         static func == (lhs: Self, rhs: Self) -> Bool {
@@ -17,6 +18,7 @@ enum AppError: LocalizedError, Sendable, Equatable {
 
     case authError
     case incompleteSearchResults
+    case keychainError
     case noToken
     case paginationLimitExceeded
     case rateLimitExceeded(RateLimitContext)
@@ -29,6 +31,8 @@ enum AppError: LocalizedError, Sendable, Equatable {
             return "Authentication failed. Check your GitHub token."
         case .incompleteSearchResults:
             return "GitHub search returned incomplete results. Try again later or narrow the search."
+        case .keychainError:
+            return "Unable to access the GitHub token in Keychain."
         case .noToken:
             return "No GitHub token configured."
         case .paginationLimitExceeded:
