@@ -99,4 +99,36 @@ extension GitHubRESTClientTests {
         }
         #expect(detailRequests.count == 2)
     }
+
+    @Test
+    func resolveDisappearedPRs_unknownMergeableStateWithRetryDisabled_doesNotRetry() async {
+        let harness = Harness()
+        defer { harness.teardown() }
+        MockURLProtocol.stub(
+            urlContains: "/repos/org/repo/pulls/1",
+            persistent: true,
+            json: [
+                "head": ["sha": "abc123def456"],
+                "state": "closed",
+                "user": ["login": "octocat"],
+                "assignees": [],
+                "requested_reviewers": [],
+                "mergeable_state": "unknown",
+            ]
+        )
+
+        let client = GitHubRESTClient(
+            token: "test-token",
+            session: harness.session,
+            mergeabilityRetryDelayNanoseconds: 0
+        )
+        let confirmed = await client.resolveDisappearedPRs([.fixture(number: 1, repoFullName: "org/repo")])
+
+        #expect(confirmed.map(\.number) == [1])
+        let detailRequests = MockURLProtocol.capturedRequests.filter {
+            ($0.url?.absoluteString.contains("/repos/org/repo/pulls/1") ?? false)
+                && ($0.url?.absoluteString.contains("/reviews") ?? false) == false
+        }
+        #expect(detailRequests.count == 1)
+    }
 }

@@ -371,6 +371,7 @@ struct AppStateTests {
                 recentlyClosedPRs: [closedPR],
                 lastUpdated: timestamp,
                 isLoading: false,
+                warningMessage: "Results truncated",
                 error: nil,
                 isStale: false
             ),
@@ -386,6 +387,7 @@ struct AppStateTests {
         #expect(appState.panel.recentlyClosedPRs.map(\.number) == [99])
         #expect(appState.panel.lastUpdated == timestamp)
         #expect(appState.panel.isLoading == false)
+        #expect(appState.panel.warningMessage == "Results truncated")
         #expect(appState.panel.triageSnapshot.menuBarBadgeCount == 1)
 
         assertAuthenticated(
@@ -411,6 +413,7 @@ struct AppStateTests {
                     recentlyClosedPRs: [],
                     lastUpdated: nil,
                     isLoading: false,
+                    warningMessage: nil,
                     error: nil,
                     isStale: false
                 ),
@@ -422,6 +425,46 @@ struct AppStateTests {
         appState.auth.authenticationStatus = .authenticated(username: "octocat")
 
         #expect(appState.panel.triageSnapshot == originalSnapshot)
+    }
+
+    @Test
+    func panelContentState_warningWithExistingPRs_staysPrList() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.applyPollSnapshot(
+            .init(
+                panel: .init(
+                    triageSnapshot: .build(from: [.fixture(number: 1, reviewRequestedFromMe: true)]),
+                    recentlyClosedPRs: [],
+                    lastUpdated: nil,
+                    isLoading: false,
+                    warningMessage: "Results truncated",
+                    error: nil,
+                    isStale: false
+                ),
+                auth: .init(
+                    authenticationStatus: .authenticated(username: "octocat"),
+                    tokenValidationWarningMessage: nil
+                )
+            )
+        )
+
+        #expect(appState.panelContentState == .prList)
+    }
+
+    @Test
+    func healthStatus_warningDoesNotOverrideExistingTriageHealth() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.isLoading = false
+        appState.prs = [.fixture(number: 1, reviewRequestedFromMe: true)]
+        appState.panel.warningMessage = "Results truncated"
+
+        #expect(appState.healthStatus == .yellow)
     }
 
     private func assertAuthenticated(

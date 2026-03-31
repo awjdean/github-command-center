@@ -21,6 +21,13 @@ struct PollingEngineTests {
         }
     }
 
+    private func successResult(
+        _ prs: [PRState],
+        warningMessage: String? = nil
+    ) -> Result<PRFetchResult, Error> {
+        .success(.init(prs: prs, warningMessage: warningMessage))
+    }
+
     @Test
     func pollInterval_fewerThan20PRs_is60s() {
         let harness = Harness()
@@ -66,7 +73,7 @@ struct PollingEngineTests {
         let harness = Harness()
         let pr = PRState.fixture(number: 1)
         harness.mockSource.validateTokenResult = .success("octocat")
-        harness.mockSource.fetchResult = .success([pr])
+        harness.mockSource.fetchResult = successResult([pr])
 
         await harness.engine.poll()
 
@@ -77,7 +84,7 @@ struct PollingEngineTests {
     @Test
     func poll_setsLastUpdated() async {
         let harness = Harness()
-        harness.mockSource.fetchResult = .success([.fixture()])
+        harness.mockSource.fetchResult = successResult([.fixture()])
 
         #expect(harness.appState.lastUpdated == nil)
         await harness.engine.poll()
@@ -88,7 +95,7 @@ struct PollingEngineTests {
     func poll_clearsError_onSuccess() async {
         let harness = Harness()
         harness.appState.error = .networkError
-        harness.mockSource.fetchResult = .success([])
+        harness.mockSource.fetchResult = successResult([])
 
         await harness.engine.poll()
 
@@ -99,7 +106,7 @@ struct PollingEngineTests {
     func poll_setsIsLoading_falseAfterSuccess() async {
         let harness = Harness()
         harness.appState.isLoading = true
-        harness.mockSource.fetchResult = .success([])
+        harness.mockSource.fetchResult = successResult([])
 
         await harness.engine.poll()
 
@@ -118,7 +125,7 @@ struct PollingEngineTests {
             reviewStatus: .changesRequested(by: ["alice"]),
             createdByMe: true
         )
-        harness.mockSource.fetchResult = .success([pr])
+        harness.mockSource.fetchResult = successResult([pr])
 
         await harness.engine.poll()
 
@@ -130,10 +137,10 @@ struct PollingEngineTests {
         let harness = Harness()
         let pr = PRState.fixture(number: 99)
         harness.mockSource.resolvedDisappearedPRs = [pr]
-        harness.mockSource.fetchResult = .success([pr])
+        harness.mockSource.fetchResult = successResult([pr])
         await harness.engine.poll()
 
-        harness.mockSource.fetchResult = .success([])
+        harness.mockSource.fetchResult = successResult([])
         await harness.engine.poll()
 
         #expect(harness.appState.recentlyClosedPRs.count == 1)
@@ -144,11 +151,11 @@ struct PollingEngineTests {
     func poll_PRDisappears_withoutConfirmedClosure_notMarkedRecentlyClosed() async {
         let harness = Harness()
         let pr = PRState.fixture(number: 99)
-        harness.mockSource.fetchResult = .success([pr])
+        harness.mockSource.fetchResult = successResult([pr])
         await harness.engine.poll()
 
         harness.mockSource.resolvedDisappearedPRs = []
-        harness.mockSource.fetchResult = .success([])
+        harness.mockSource.fetchResult = successResult([])
         await harness.engine.poll()
 
         #expect(harness.appState.recentlyClosedPRs.isEmpty)
@@ -160,7 +167,7 @@ struct PollingEngineTests {
         harness.mockSource.fetchResult = .failure(AppError.networkError)
         await harness.engine.poll()
 
-        harness.mockSource.fetchResult = .success([])
+        harness.mockSource.fetchResult = successResult([])
         await harness.engine.poll()
 
         #expect(harness.appState.error == nil)
@@ -203,6 +210,30 @@ struct PollingEngineTests {
     }
 
     @Test
+    func poll_serverError_preservesErrorAndRequestsImmediateRetryAfterBackoff() async {
+        let harness = Harness()
+        harness.mockSource.validateTokenResult = .success("octocat")
+        harness.mockSource.fetchResult = .failure(AppError.serverError(statusCode: 500))
+
+        let outcome = await harness.engine.poll()
+
+        #expect(harness.appState.error == .serverError(statusCode: 500))
+        #expect(outcome == .continueImmediately)
+    }
+
+    @Test
+    func poll_paginationLimitExceeded_preservesErrorAndUsesRegularInterval() async {
+        let harness = Harness()
+        harness.mockSource.validateTokenResult = .success("octocat")
+        harness.mockSource.fetchResult = .failure(AppError.paginationLimitExceeded)
+
+        let outcome = await harness.engine.poll()
+
+        #expect(harness.appState.error == .paginationLimitExceeded)
+        #expect(outcome == .useRegularInterval)
+    }
+
+    @Test
     func poll_rateLimitExceeded_setsRateLimitState() async {
         let harness = Harness()
         let resetAt = Date().addingTimeInterval(3600)
@@ -222,7 +253,7 @@ struct PollingEngineTests {
     func poll_setsAuthenticatedStatus_onFirstSuccess() async {
         let harness = Harness()
         harness.mockSource.validateTokenResult = .success("octocat")
-        harness.mockSource.fetchResult = .success([])
+        harness.mockSource.fetchResult = successResult([])
 
         await harness.engine.poll()
 
@@ -237,7 +268,7 @@ struct PollingEngineTests {
     func poll_reusesUsername_doesNotRevalidateToken() async {
         let harness = Harness()
         harness.appState.authenticationStatus = .authenticated(username: "octocat")
-        harness.mockSource.fetchResult = .success([])
+        harness.mockSource.fetchResult = successResult([])
 
         await harness.engine.poll()
 
@@ -250,7 +281,7 @@ struct PollingEngineTests {
         let harness = Harness()
         harness.appState.authenticationStatus = .authenticated(username: "octocat")
         harness.appState.tokenValidationWarningMessage = "Still verifying"
-        harness.mockSource.fetchResult = .success([])
+        harness.mockSource.fetchResult = successResult([])
 
         await harness.engine.poll()
 
@@ -262,7 +293,7 @@ struct PollingEngineTests {
         let harness = Harness()
         harness.appState.authenticationStatus = .authenticated(username: "octocat")
         harness.appState.tokenValidationWarningMessage = "Still verifying"
-        harness.mockSource.fetchResult = .success([.fixture(number: 7)])
+        harness.mockSource.fetchResult = successResult([.fixture(number: 7)])
 
         await harness.engine.poll()
 
@@ -270,15 +301,41 @@ struct PollingEngineTests {
     }
 
     @Test
+    func poll_successWithWarning_storesPanelWarningMessage() async {
+        let harness = Harness()
+        harness.appState.authenticationStatus = .authenticated(username: "octocat")
+        harness.mockSource.fetchResult = successResult(
+            [.fixture(number: 7)],
+            warningMessage: "Results truncated"
+        )
+
+        await harness.engine.poll()
+
+        #expect(harness.appState.panel.warningMessage == "Results truncated")
+    }
+
+    @Test
+    func poll_successWithoutWarning_clearsExistingPanelWarningMessage() async {
+        let harness = Harness()
+        harness.appState.authenticationStatus = .authenticated(username: "octocat")
+        harness.appState.panel.warningMessage = "Results truncated"
+        harness.mockSource.fetchResult = successResult([.fixture(number: 7)])
+
+        await harness.engine.poll()
+
+        #expect(harness.appState.panel.warningMessage == nil)
+    }
+
+    @Test
     func reset_clearsPreviousPRsBeforeNextPoll() async {
         let harness = Harness()
         let pr = PRState.fixture(number: 99)
-        harness.mockSource.fetchResult = .success([pr])
+        harness.mockSource.fetchResult = successResult([pr])
         await harness.engine.poll()
 
         harness.engine.reset()
         harness.mockSource.resolvedDisappearedPRs = [pr]
-        harness.mockSource.fetchResult = .success([])
+        harness.mockSource.fetchResult = successResult([])
         await harness.engine.poll()
 
         #expect(harness.mockSource.lastResolvedDisappearedInput.isEmpty)
@@ -288,11 +345,11 @@ struct PollingEngineTests {
     func reset_cancelsRecentlyClosedClearTask() async {
         let harness = Harness(recentlyClosedClearDelay: 0.05)
         let pr = PRState.fixture(number: 99)
-        harness.mockSource.fetchResult = .success([pr])
+        harness.mockSource.fetchResult = successResult([pr])
         await harness.engine.poll()
 
         harness.mockSource.resolvedDisappearedPRs = [pr]
-        harness.mockSource.fetchResult = .success([])
+        harness.mockSource.fetchResult = successResult([])
         await harness.engine.poll()
         #expect(harness.appState.recentlyClosedPRs.map(\.number) == [99])
 
@@ -382,7 +439,7 @@ struct PollingEngineTests {
         harness.appState.lastUpdated = Date().addingTimeInterval(-301)
         harness.appState.isStale = true
         harness.mockSource.validateTokenResult = .success("octocat")
-        harness.mockSource.fetchResult = .success([.fixture()])
+        harness.mockSource.fetchResult = successResult([.fixture()])
 
         await harness.engine.poll()
 
@@ -394,7 +451,7 @@ struct PollingEngineTests {
         let harness = Harness()
         let pr = PRState.fixture(number: 7, reviewRequestedFromMe: true)
         harness.mockSource.validateTokenResult = .success("octocat")
-        harness.mockSource.fetchResult = .success([pr])
+        harness.mockSource.fetchResult = successResult([pr])
 
         await harness.engine.poll()
 
@@ -414,7 +471,7 @@ struct PollingEngineTests {
         let harness = Harness()
         let pr = PRState.fixture(number: 7, reviewRequestedFromMe: true)
         harness.mockSource.validateTokenResult = .success("octocat")
-        harness.mockSource.fetchResult = .success([pr])
+        harness.mockSource.fetchResult = successResult([pr])
 
         await harness.engine.poll()
         let initialSnapshot = harness.appState.panel.triageSnapshot

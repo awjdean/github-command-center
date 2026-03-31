@@ -163,4 +163,48 @@ extension GitHubRESTClientTests {
             Issue.record("Expected review status aggregated from all review pages")
         }
     }
+
+    @Test
+    func fetchAllPRStates_searchCap_returnsWarningAndStopsAtPage10() async throws {
+        let harness = Harness()
+        defer { harness.teardown() }
+
+        for page in 1...10 {
+            let items: [[String: Any]] = (1...100).map { offset in
+                let number = ((page - 1) * 100) + offset
+                return [
+                    "number": number,
+                    "title": "PR \(number)",
+                    "html_url": "https://github.com/org/repo/pull/\(number)",
+                    "draft": false,
+                    "updated_at": "2026-03-30T10:00:00Z",
+                    "repository_url": "not-a-github-repository-url",
+                ]
+            }
+            let searchURL =
+                "/search/issues?q=is:pr%20is:open%20involves:octocat&per_page=100&page=\(page)&sort=updated&order=desc"
+            MockURLProtocol.stub(
+                urlContains: searchURL,
+                json: [
+                    "total_count": 1500,
+                    "incomplete_results": false,
+                    "items": items,
+                ]
+            )
+        }
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
+        let result = try await client.fetchAllPRStates(username: "octocat")
+
+        #expect(result.prs.isEmpty)
+        #expect(
+            result.warningMessage
+                == "Showing the first 1,000 matching pull requests due to GitHub search limits."
+        )
+        let searchRequests = MockURLProtocol.capturedRequests.filter {
+            $0.url?.absoluteString.contains("/search/issues") == true
+        }
+        #expect(searchRequests.count == 10)
+        #expect(searchRequests.contains { $0.url?.absoluteString.contains("page=11") == true } == false)
+    }
 }

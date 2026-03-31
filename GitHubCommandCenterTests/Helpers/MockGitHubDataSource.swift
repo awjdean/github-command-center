@@ -2,11 +2,11 @@ import Foundation
 
 @testable import GitHubCommandCenter
 
-final class MockGitHubDataSource: GitHubDataSource {
+final class MockGitHubDataSource: GitHubDataSource, @unchecked Sendable {
     private let stateQueue = DispatchQueue(label: "MockGitHubDataSource.state")
 
     private var storedValidateTokenResult: Result<String, Error> = .success("testuser")
-    private var storedFetchResult: Result<[PRState], Error> = .success([])
+    private var storedFetchResult: Result<PRFetchResult, Error> = .success(.init(prs: []))
     private var storedValidateTokenCallCount = 0
     private var storedFetchCallCount = 0
     private var storedResolvedDisappearedPRs: [PRState] = []
@@ -17,7 +17,7 @@ final class MockGitHubDataSource: GitHubDataSource {
         set { stateQueue.sync { storedValidateTokenResult = newValue } }
     }
 
-    var fetchResult: Result<[PRState], Error> {
+    var fetchResult: Result<PRFetchResult, Error> {
         get { stateQueue.sync { storedFetchResult } }
         set { stateQueue.sync { storedFetchResult = newValue } }
     }
@@ -52,14 +52,14 @@ final class MockGitHubDataSource: GitHubDataSource {
         }
     }
 
-    func fetchAllPRStates(username: String) async throws -> [PRState] {
+    func fetchAllPRStates(username: String) async throws -> PRFetchResult {
         let result = stateQueue.sync {
             storedFetchCallCount += 1
             return storedFetchResult
         }
 
         switch result {
-        case .success(let prs): return prs
+        case .success(let result): return result
         case .failure(let error): throw error
         }
     }
