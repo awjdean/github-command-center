@@ -23,12 +23,12 @@ struct KeychainServiceTests {
     @Test
     func saveAndLoad_returnsStoredToken() throws {
         let service = makeService()
+        defer { try? service.deleteToken() }
         try service.saveToken("ghp_test_token_123")
 
         let loaded = try service.loadToken()
 
         #expect(loaded == "ghp_test_token_123")
-        try? service.deleteToken()
     }
 
     @Test
@@ -43,13 +43,13 @@ struct KeychainServiceTests {
     @Test
     func save_overwritesPreviousToken() throws {
         let service = makeService()
+        defer { try? service.deleteToken() }
         try service.saveToken("old_token")
         try service.saveToken("new_token")
 
         let loaded = try service.loadToken()
 
         #expect(loaded == "new_token")
-        try? service.deleteToken()
     }
 
     @Test
@@ -72,24 +72,24 @@ struct KeychainServiceTests {
     @Test
     func save_emptyString_canBeLoadedBack() throws {
         let service = makeService()
+        defer { try? service.deleteToken() }
         try service.saveToken("")
 
         let loaded = try service.loadToken()
 
         #expect(loaded == "")
-        try? service.deleteToken()
     }
 
     @Test
     func save_unicodeToken_roundtrips() throws {
         let service = makeService()
+        defer { try? service.deleteToken() }
         let token = "ghp_🔑_test_token"
         try service.saveToken(token)
 
         let loaded = try service.loadToken()
 
         #expect(loaded == token)
-        try? service.deleteToken()
     }
 
     @Test
