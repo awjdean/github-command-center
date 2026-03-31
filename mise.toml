@@ -59,7 +59,7 @@ xcodebuild \
   test
 """
 
-[tasks."check-style"]
+[tasks.check]
 description = "Check Swift formatting + lint"
 depends = ["sync"]
 run = [
@@ -67,23 +67,19 @@ run = [
   "swiftlint lint --strict",
 ]
 
-[tasks."fix-style"]
-description = "Auto-fix Swift formatting + lint issues"
+# `fix` intentionally only syncs and applies auto-fixes; it does not run tests or full checks.
+[tasks.fix]
+description = "Fix all formatting + lint issues"
 depends = ["sync"]
 run = [
   "swift format --in-place --recursive GitHubCommandCenter GitHubCommandCenterTests",
   "swiftlint lint --fix",
 ]
 
-# `check` is the comprehensive verification pipeline: sync, style checks, and tests.
-[tasks.check]
-description = "Run all checks"
-depends = ["sync", "check-style", "test"]
-
-# `fix` intentionally only syncs and applies auto-fixes; it does not run tests or full checks.
-[tasks.fix]
-description = "Fix all formatting + lint issues"
-depends = ["sync", "fix-style"]
+# `verify` intentionally mutates via `fix` before re-checking style and running tests.
+[tasks.verify]
+description = "Auto-fix style issues, then run style checks and tests"
+run = ["mise run fix", "mise run check", "mise run test"]
 
 [tasks.start]
 description = "Build and launch the app"

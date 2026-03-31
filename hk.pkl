@@ -4,8 +4,8 @@ import "package://github.com/jdx/hk/releases/download/v1.39.0/hk@1.39.0#/Builtin
 local linters = new Mapping<String, Step> {
     ["swift-style"] {
         glob = "**/*.swift"
-        check = "mise run check-style"
-        fix = "mise run fix-style && mise run check-style"
+        check = "mise run check"
+        fix = "mise run fix && mise run check"
     }
     ["trailing-whitespace"] = Builtins.trailing_whitespace
     ["check-merge-conflict"] = Builtins.check_merge_conflict

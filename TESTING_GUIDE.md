@@ -37,10 +37,9 @@ Run any task with `mise run <task>`:
 | `build` | Build the app with `xcodebuild` |
 | `build-release` | Build the release app bundle into `build/DerivedData` |
 | `test` | Run the Swift test suite with `xcodebuild` |
-| `check-style` | Run `swift format` linting and `swiftlint` in read-only mode |
-| `fix-style` | Apply `swift format` and `swiftlint` fixes |
-| `check` | Run the full verification workflow |
+| `check` | Run `swift format` linting and `swiftlint` in read-only mode |
 | `fix` | Regenerate the project and apply style fixes |
+| `verify` | Run `fix`, then re-run style checks, then run tests |
 | `hooks:install` | Install git hooks through `hk` |
 
 ## Swift Formatting and Linting
@@ -101,12 +100,14 @@ swiftlint lint --strict
 swiftlint lint --fix
 ```
 
-### Combined style tasks
+### Style task shortcuts
 
 ```bash
-mise run check-style
-mise run fix-style
+mise run check
+mise run fix
 ```
+
+`mise run verify` is the broader local convenience workflow. It is intentionally mutating because it runs `mise run fix` before `mise run check` and `mise run test`.
 
 ## Git Hooks
 
@@ -121,8 +122,8 @@ mise run hooks:install
 The `pre-commit` hook:
 
 1. Stashes unstaged changes with `stash = "git"`
-2. Runs `mise run fix-style` when staged Swift files are present
-3. Re-runs `mise run check-style` to make sure the fixes are clean
+2. Runs `mise run fix` when staged Swift files are present
+3. Re-runs `mise run check` to make sure the fixes are clean
 4. Runs trailing-whitespace and merge-conflict checks
 5. Re-stages files updated by the fix step
 
@@ -132,7 +133,9 @@ The `pre-commit` hook:
 
 ```bash
 mise run build
+mise run check
 mise run test
+mise run verify
 ```
 
 To open the project in Xcode:

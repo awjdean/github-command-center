@@ -1181,13 +1181,13 @@ git commit -m "feat: add drag handle grip icon that appears on PR row hover"
 
 - [ ] **Step 1: Run style checks**
 
-Run: `mise run check-style`
+Run: `mise run check`
 Expected: No style violations.
 
 - [ ] **Step 2: Run full verification**
 
-Run: `mise run check`
-Expected: Build, tests, and style checks all pass.
+Run: `mise run verify`
+Expected: Auto-fixes, style checks, and tests all pass.
 
 - [ ] **Step 3: Run persistence and polling smoke checks**
 
@@ -1200,7 +1200,7 @@ Expected:
 
 - [ ] **Step 4: Fix any issues found**
 
-If style or test issues arise, fix them and re-run `mise run check`.
+If style or test issues arise, fix them and re-run `mise run verify`.
 
 - [ ] **Step 5: Final commit if any fixes were needed**
 

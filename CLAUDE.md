@@ -8,8 +8,8 @@ Swift/SwiftUI macOS 14+ menu bar app monitoring GitHub PR status. No external Sw
 - Sync tools and regenerate the Xcode project: `mise run sync`
 - Build: `mise run build`
 - Test: `mise run test`
-- Style checks: `mise run check-style`
-- Full verification: `mise run check`
+- Style checks: `mise run check`
+- Fix, then re-run style checks and tests: `mise run verify`
 - After editing `project.yml`: run `mise run sync`
 
 ## Skill routing

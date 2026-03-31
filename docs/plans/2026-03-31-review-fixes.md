@@ -84,7 +84,7 @@ Expected: failures around cache eviction, notification delivery error handling, 
 Run:
 
 ```bash
-mise run check-style
+mise run check
 xcodebuild test -project GitHubCommandCenter.xcodeproj -scheme GitHubCommandCenter -destination 'platform=macOS' -only-testing:GitHubCommandCenterTests/GitHubRESTClientTests -only-testing:GitHubCommandCenterTests/GitHubRESTClientTokenAccessTests -only-testing:GitHubCommandCenterTests/GitHubRESTClientValidationTests -only-testing:GitHubCommandCenterTests/AppStateTests -only-testing:GitHubCommandCenterTests/PollingEngineTests -only-testing:GitHubCommandCenterTests/NotificationServiceTests -only-testing:GitHubCommandCenterTests/SettingsValidationTests -only-testing:GitHubCommandCenterTests/KeychainServiceTests
 ```
 
