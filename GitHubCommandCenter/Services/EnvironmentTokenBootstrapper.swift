@@ -3,20 +3,24 @@ import OSLog
 
 struct EnvironmentTokenBootstrapper {
     private static let logger = Logger(subsystem: Log.subsystem, category: "EnvironmentTokenBootstrapper")
+    private static let defaultSearchDepthLimit = 12
     private let keychain: KeychainService
     private let environment: [String: String]
     private let searchRoots: [URL]
+    private let searchDepthLimit: Int
     private let fileManager: FileManager
 
     init(
         keychain: KeychainService = .shared,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         searchRoots: [URL] = Self.defaultSearchRoots(bundle: .main),
+        searchDepthLimit: Int = Self.defaultSearchDepthLimit,
         fileManager: FileManager = .default
     ) {
         self.keychain = keychain
         self.environment = environment
         self.searchRoots = searchRoots
+        self.searchDepthLimit = searchDepthLimit
         self.fileManager = fileManager
     }
 
@@ -88,17 +92,24 @@ struct EnvironmentTokenBootstrapper {
     private func searchDirectoryPaths() -> [String] {
         var seenPaths = Set<String>()
         var directories: [String] = []
+        let effectiveSearchDepthLimit = max(searchDepthLimit, 1)
 
         for root in searchRoots {
             var directoryPath = normalizedDirectoryPath(for: root)
+            var depth = 0
 
-            while true {
+            while depth < effectiveSearchDepthLimit {
                 if seenPaths.insert(directoryPath).inserted {
                     directories.append(directoryPath)
                 }
 
                 let parentPath = (directoryPath as NSString).deletingLastPathComponent
                 if parentPath.isEmpty || parentPath == directoryPath {
+                    break
+                }
+
+                depth += 1
+                if depth >= effectiveSearchDepthLimit {
                     break
                 }
                 directoryPath = parentPath
