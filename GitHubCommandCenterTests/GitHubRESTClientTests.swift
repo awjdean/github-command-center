@@ -383,6 +383,84 @@ struct GitHubRESTClientTests {
     }
 
     @Test
+    func fetchAllPRStates_commitStatuses403_throwsAuthError() async {
+        let harness = Harness()
+        defer { harness.teardown() }
+        stubFullPRFlow(number: 1, statusCodeForCommitStatuses: 403)
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
+
+        do {
+            _ = try await client.fetchAllPRStates(username: "octocat")
+            Issue.record("Expected authError")
+        } catch let error as AppError {
+            #expect(error == .authError)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test
+    func fetchAllPRStates_commitStatusesRateLimited_throwsRateLimitExceeded() async {
+        let harness = Harness()
+        defer { harness.teardown() }
+        let resetTS = Int(Date().timeIntervalSince1970) + 120
+
+        MockURLProtocol.stub(
+            urlContains: "/search/issues",
+            json: [
+                "total_count": 1,
+                "incomplete_results": false,
+                "items": [
+                    [
+                        "number": 1,
+                        "title": "Test PR",
+                        "html_url": "https://github.com/org/app/pull/1",
+                        "draft": false,
+                        "updated_at": "2026-03-30T10:00:00.000Z",
+                        "repository_url": "https://api.github.com/repos/org/app",
+                    ]
+                ],
+            ]
+        )
+        MockURLProtocol.stub(urlContains: "/pulls/1/reviews?per_page=100&page=1", json: [])
+        MockURLProtocol.stub(urlContains: "/pulls/1/reviews?per_page=100&page=2", json: [])
+        MockURLProtocol.stub(urlContains: "/pulls/1/reviews", json: [])
+        MockURLProtocol.stub(urlContains: "/check-runs", json: ["total_count": 0, "check_runs": []])
+        MockURLProtocol.stub(
+            urlContains: "/status",
+            statusCode: 403,
+            headers: [
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Reset": "\(resetTS)",
+            ],
+            json: ["message": "API rate limit exceeded"]
+        )
+        MockURLProtocol.stub(
+            urlContains: "/pulls/1",
+            json: [
+                "head": ["sha": "abc123def456"],
+                "state": "open",
+                "user": ["login": "octocat"],
+                "assignees": [],
+                "requested_reviewers": [],
+                "mergeable_state": "clean",
+            ]
+        )
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
+
+        do {
+            _ = try await client.fetchAllPRStates(username: "octocat")
+            Issue.record("Expected rateLimitExceeded")
+        } catch AppError.rateLimitExceeded(let resetAt) {
+            #expect(resetAt > Date())
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test
     func fetchAllPRStates_failedCheckWinsOverPendingCheck() async throws {
         let harness = Harness()
         defer { harness.teardown() }

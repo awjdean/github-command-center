@@ -1,9 +1,11 @@
 import Foundation
+import OSLog
 // swiftlint:disable file_length type_body_length
 
 actor GitHubRESTClient: GitHubDataSource {
     private static let searchResultsMaxPageLimit = 100
     private static let reviewMaxPageLimit = 10
+    private static let logger = Logger(subsystem: Log.subsystem, category: "GitHubRESTClient")
     private static let incompleteSearchWarningMessage =
         "GitHub search results are temporarily incomplete. "
         + "The token was saved, but full PR status access could not be verified yet."
@@ -69,8 +71,6 @@ actor GitHubRESTClient: GitHubDataSource {
             usageOrder.append(key)
         }
     }
-
-    private static let maxCacheEntries = 500
 
     private let token: String
     private let session: URLSession
@@ -139,7 +139,7 @@ actor GitHubRESTClient: GitHubDataSource {
     func fetchAllPRStates(username: String) async throws -> [PRState] {
         let searchItems = try await searchOpenPRs(username: username)
         let maxConcurrency = 8
-        return await withTaskGroup(of: PRState?.self) { group in
+        return try await withThrowingTaskGroup(of: PRState?.self) { group in
             var results: [PRState] = []
             var index = 0
 
@@ -148,7 +148,20 @@ actor GitHubRESTClient: GitHubDataSource {
                 let item = searchItems[index]
                 index += 1
                 group.addTask { [self] in
-                    try? await buildPRState(from: item, username: username)
+                    do {
+                        return try await buildPRState(from: item, username: username)
+                    } catch let error as AppError {
+                        switch error {
+                        case .authError, .rateLimitExceeded:
+                            throw error
+                        default:
+                            Self.logSkippedPRStateBuild(for: item, error: error)
+                            return nil
+                        }
+                    } catch {
+                        Self.logSkippedPRStateBuild(for: item, error: error)
+                        return nil
+                    }
                 }
             }
 
@@ -156,7 +169,7 @@ actor GitHubRESTClient: GitHubDataSource {
                 addNextTask()
             }
 
-            for await state in group {
+            for try await state in group {
                 if let state { results.append(state) }
                 addNextTask()
             }
@@ -290,8 +303,8 @@ actor GitHubRESTClient: GitHubDataSource {
         let data = try await get("/repos/\(owner)/\(repo)/pulls/\(number)")
         var detail = try decode(PRDetail.self, from: data)
 
-        // GitHub's mergeable field may be null while being computed — retry once after a delay
-        if retryForMergeability, detail.mergeableState == nil {
+        // GitHub's mergeable field may be null or "unknown" while being computed — retry once after a delay
+        if retryForMergeability, detail.mergeableState == nil || detail.mergeableState == "unknown" {
             try await Task.sleep(nanoseconds: mergeabilityRetryDelayNanoseconds)
             let retryData = try await get("/repos/\(owner)/\(repo)/pulls/\(number)")
             detail = try decode(PRDetail.self, from: retryData)
@@ -719,7 +732,11 @@ actor GitHubRESTClient: GitHubDataSource {
             return false
         }
 
-        return apiError.message.localizedCaseInsensitiveContains("rate limit")
+        return apiError.message.range(
+            of: "rate limit",
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: Locale(identifier: "en_US_POSIX")
+        ) != nil
     }
 
     private func parseOAuthScopes(from response: HTTPURLResponse) -> [String] {
@@ -727,6 +744,14 @@ actor GitHubRESTClient: GitHubDataSource {
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty } ?? []
+    }
+
+    private static func logSkippedPRStateBuild(for item: SearchItem, error: Error) {
+        let prIdentifier = "\(item.repositoryUrl)#\(item.number)"
+        let errorDescription = error.localizedDescription
+        logger.error(
+            "Skipping PR state build for \(prIdentifier, privacy: .public): \(errorDescription, privacy: .public)"
+        )
     }
 
     private func extractRepoName(from repositoryURL: String) -> String? {

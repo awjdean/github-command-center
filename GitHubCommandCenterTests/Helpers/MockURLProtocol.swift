@@ -49,7 +49,7 @@ final class MockURLProtocol: URLProtocol {
             data = try JSONSerialization.data(withJSONObject: json)
         } catch {
             XCTFail("Failed to serialize JSON stub for pattern \(pattern): \(error)")
-            data = Data()
+            return
         }
         let handler = Handler(
             urlContains: pattern,
