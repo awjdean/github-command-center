@@ -83,7 +83,7 @@ final class PollingEngine: PollingControlling {
             switch outcome {
             case .useRegularInterval:
                 let interval = pollInterval
-                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                await sleep(interval)
             case .continueImmediately:
                 continue pollingLoop
             case .stopLoop:

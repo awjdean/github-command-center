@@ -245,6 +245,28 @@ struct PollingEngineTests {
         #expect(await sleepRecorder.recordedIntervals() == [2])
     }
 
+    @Test(.timeLimit(.minutes(1)))
+    func start_regularPollingUsesInjectedSleepClosure() async throws {
+        let sleepRecorder = SleepRecorder()
+        var stopPolling: (@MainActor () -> Void)?
+        let harness = Harness(sleep: { interval in
+            await sleepRecorder.record(interval)
+            await MainActor.run {
+                stopPolling?()
+            }
+        })
+        stopPolling = {
+            harness.engine.stop()
+        }
+        harness.mockSource.validateTokenResult = .success("octocat")
+        harness.mockSource.fetchResult = successResult([])
+
+        harness.engine.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(await sleepRecorder.recordedIntervals() == [60])
+    }
+
     @Test
     func poll_serverError_preservesErrorAndRequestsImmediateRetryAfterBackoff() async {
         let harness = Harness(sleep: { _ in })
@@ -410,6 +432,8 @@ struct PollingEngineTests {
         harness.engine.reset()
         harness.appState.recentlyClosedPRs = [.fixture(number: 100)]
         var recentlyClosedWasCleared = false
+
+        try? await Task.sleep(nanoseconds: 100_000_000)
 
         await confirmation("recently closed PRs stay visible after reset") { confirmation in
             recentlyClosedWasCleared = harness.appState.recentlyClosedPRs.isEmpty
