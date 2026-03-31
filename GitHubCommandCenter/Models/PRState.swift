@@ -18,10 +18,18 @@ struct PRState: Identifiable, Equatable, Sendable {
         case ready
     }
 
-    struct FailingCheck: Equatable, Sendable {
+    struct FailingCheck: Identifiable, Equatable, Sendable {
         let name: String
         let conclusion: String  // "failure", "timed_out", "cancelled", "action_required", "error"
         let url: URL?
+
+        var id: String {
+            if let url {
+                return url.absoluteString
+            }
+
+            return "\(name)|\(conclusion)"
+        }
     }
 
     enum CIStatus: Equatable, Sendable {
@@ -110,11 +118,34 @@ struct PRState: Identifiable, Equatable, Sendable {
         return score
     }
 
-    static func compareForNeedsAction(_ lhs: PRState, _ rhs: PRState) -> Bool {
-        lhs.urgencyScore != rhs.urgencyScore
-            ? lhs.urgencyScore > rhs.urgencyScore
-            : lhs.updatedAt > rhs.updatedAt
+    /// higher urgency first, then more recent first
+    struct NeedsActionComparator: SortComparator {
+        var order: SortOrder = .forward
+
+        func compare(_ lhs: PRState, _ rhs: PRState) -> ComparisonResult {
+            let result: ComparisonResult
+
+            if lhs.urgencyScore != rhs.urgencyScore {
+                result = lhs.urgencyScore > rhs.urgencyScore ? .orderedAscending : .orderedDescending
+            } else if lhs.updatedAt != rhs.updatedAt {
+                result = lhs.updatedAt > rhs.updatedAt ? .orderedAscending : .orderedDescending
+            } else {
+                result = .orderedSame
+            }
+
+            switch order {
+            case .forward:
+                return result
+            case .reverse:
+                switch result {
+                case .orderedAscending: return .orderedDescending
+                case .orderedDescending: return .orderedAscending
+                case .orderedSame: return .orderedSame
+                }
+            }
+        }
     }
+    static let needsActionComparator = NeedsActionComparator()
 
     // Highest-precedence role label for display in the PR row
     var displayRole: String {

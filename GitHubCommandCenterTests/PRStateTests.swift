@@ -238,7 +238,7 @@ struct PRStateTests {
     func needsActionSortOrder_higherUrgencyFirst() {
         let low = PRState.fixture(number: 1, assignedToMe: true)
         let high = PRState.fixture(number: 2, reviewRequestedFromMe: true)
-        let prs = [low, high].sorted(by: PRState.compareForNeedsAction)
+        let prs = [low, high].sorted(using: PRState.needsActionComparator)
 
         #expect(prs.first?.number == 2)
     }
@@ -255,7 +255,7 @@ struct PRStateTests {
             reviewRequestedFromMe: true,
             updatedAt: Date(timeIntervalSince1970: 2_000)
         )
-        let prs = [older, newer].sorted(by: PRState.compareForNeedsAction)
+        let prs = [older, newer].sorted(using: PRState.needsActionComparator)
 
         #expect(prs.first?.number == 2)
     }
