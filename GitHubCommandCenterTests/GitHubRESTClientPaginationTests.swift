@@ -47,11 +47,29 @@ extension GitHubRESTClientTests {
                 ],
             ]
         )
+        MockURLProtocol.stub(
+            urlContains: "/pulls/1",
+            json: [
+                "head": ["sha": "abc123def456"],
+                "state": "open",
+                "user": ["login": "octocat"],
+                "assignees": [],
+                "requested_reviewers": [],
+                "mergeable_state": "clean",
+            ]
+        )
+        MockURLProtocol.stub(
+            urlContains: "/commits/abc123def456/status",
+            json: [
+                "state": "success",
+                "statuses": [],
+            ]
+        )
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
-        let username = try await client.validateTokenForAppAccess()
+        let result = try await client.validateTokenForAppAccess()
 
-        #expect(username == "octocat")
+        #expect(result == .verified(username: "octocat"))
         let searchRequests = MockURLProtocol.capturedRequests.filter {
             $0.url?.absoluteString.contains("/search/issues") == true
         }
@@ -60,7 +78,7 @@ extension GitHubRESTClientTests {
     }
 
     @Test
-    func fetchAllPRStates_reviewPaginationStopsAtSafeLimit() async throws {
+    func fetchAllPRStates_aggregatesReviewsAcrossPages() async throws {
         let harness = Harness()
         MockURLProtocol.stub(
             urlContains: "/search/issues",
@@ -84,7 +102,7 @@ extension GitHubRESTClientTests {
                 urlContains: "/pulls/1/reviews?per_page=100&page=\(page)",
                 json: Array(
                     repeating: [
-                        "user": ["login": "alice"],
+                        "user": ["login": "alice\(page)"],
                         "state": "APPROVED",
                     ],
                     count: 100
@@ -114,6 +132,17 @@ extension GitHubRESTClientTests {
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let prs = try await client.fetchAllPRStates(username: "octocat")
 
-        #expect(prs.first?.reviewStatus == .approved(by: ["alice"]))
+        let pageRequests = MockURLProtocol.capturedRequests.filter {
+            $0.url?.absoluteString.contains("/pulls/1/reviews?per_page=100&page=") == true
+        }
+        #expect(pageRequests.count == 10)
+        #expect(pageRequests.contains { $0.url?.absoluteString.contains("page=1") == true })
+        #expect(pageRequests.contains { $0.url?.absoluteString.contains("page=10") == true })
+
+        if case .approved(let reviewers) = prs.first?.reviewStatus {
+            #expect(Set(reviewers) == Set((1...10).map { "alice\($0)" }))
+        } else {
+            Issue.record("Expected review status aggregated from all review pages")
+        }
     }
 }

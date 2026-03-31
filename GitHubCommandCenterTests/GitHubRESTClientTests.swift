@@ -126,70 +126,36 @@ struct GitHubRESTClientTests {
     }
 
     @Test
-    func validateTokenForAppAccess_success_returnsUsernameWhenSearchEmpty() async throws {
+    func fetchAllPRStates_duplicateFailingCheckAcrossApis_deduplicatesDisplayedChecksAndTotals() async throws {
         let harness = Harness()
-        MockURLProtocol.stub(urlContains: "/user", json: ["login": "octocat"])
-        MockURLProtocol.stub(
-            urlContains: "/search/issues",
-            json: [
-                "total_count": 0,
-                "incomplete_results": false,
-                "items": [],
+        stubFullPRFlow(
+            checkRuns: [
+                [
+                    "name": "Unit Tests",
+                    "status": "completed",
+                    "conclusion": "failure",
+                    "html_url": "https://github.com/org/app/actions/runs/1",
+                ]
+            ],
+            statusState: "failure",
+            commitStatuses: [
+                [
+                    "context": "Unit Tests",
+                    "state": "failure",
+                    "target_url": "https://github.com/org/app/actions/runs/1",
+                ]
             ]
         )
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
-        let username = try await client.validateTokenForAppAccess()
+        let pr = try #require(try await client.fetchAllPRStates(username: "octocat").first)
 
-        #expect(username == "octocat")
-        #expect(
-            MockURLProtocol.capturedRequests.contains {
-                ($0.url?.absoluteString.contains("/search/issues") ?? false)
-                    && ($0.url?.absoluteString.contains("per_page=1") ?? false)
-            }
-        )
-    }
-
-    @Test
-    func validateTokenForAppAccess_search403_throwsAuthError() async {
-        let harness = Harness()
-        MockURLProtocol.stub(urlContains: "/user", json: ["login": "octocat"])
-        MockURLProtocol.stub(urlContains: "/search/issues", statusCode: 403)
-
-        let client = GitHubRESTClient(token: "test-token", session: harness.session)
-
-        do {
-            _ = try await client.validateTokenForAppAccess()
-            Issue.record("Expected authError")
-        } catch let error as AppError {
-            #expect(error == .authError)
-        } catch {
-            Issue.record("Unexpected error: \(error)")
-        }
-    }
-
-    @Test
-    func validateTokenForAppAccess_incompleteSearchResults_throwsIncompleteSearchResults() async {
-        let harness = Harness()
-        MockURLProtocol.stub(urlContains: "/user", json: ["login": "octocat"])
-        MockURLProtocol.stub(
-            urlContains: "/search/issues",
-            json: [
-                "total_count": 1,
-                "incomplete_results": true,
-                "items": [],
-            ]
-        )
-
-        let client = GitHubRESTClient(token: "test-token", session: harness.session)
-
-        do {
-            _ = try await client.validateTokenForAppAccess()
-            Issue.record("Expected incompleteSearchResults")
-        } catch let error as AppError {
-            #expect(error == .incompleteSearchResults)
-        } catch {
-            Issue.record("Unexpected error: \(error)")
+        if case .failing(let checks, let totalChecks) = pr.ciStatus {
+            #expect(checks.count == 1)
+            #expect(checks.map(\.name) == ["Unit Tests"])
+            #expect(totalChecks == 1)
+        } else {
+            Issue.record("Expected failing CI status")
         }
     }
 

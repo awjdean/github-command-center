@@ -10,9 +10,3 @@ protocol GitHubDataSource {
     /// Confirms which PRs that disappeared from the open/involved search are actually closed.
     func resolveDisappearedPRs(_ prs: [PRState]) async -> [PRState]
 }
-
-extension GitHubDataSource {
-    func resolveDisappearedPRs(_ prs: [PRState]) async -> [PRState] {
-        []
-    }
-}

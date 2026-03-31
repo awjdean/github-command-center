@@ -30,6 +30,7 @@ extension GitHubRESTClientTests {
         checkRunsStatusCode: Int = 200,
         updatedAt: String = "2026-03-30T10:00:00.000Z",
         statusState: String = "success",
+        statusCodeForCommitStatuses: Int = 200,
         commitStatuses: [[String: Any]] = []
     ) {
         MockURLProtocol.stub(
@@ -57,13 +58,17 @@ extension GitHubRESTClientTests {
         } else {
             MockURLProtocol.stub(urlContains: "/check-runs", statusCode: checkRunsStatusCode)
         }
-        MockURLProtocol.stub(
-            urlContains: "/status",
-            json: [
-                "state": statusState,
-                "statuses": commitStatuses,
-            ]
-        )
+        if statusCodeForCommitStatuses == 200 {
+            MockURLProtocol.stub(
+                urlContains: "/status",
+                json: [
+                    "state": statusState,
+                    "statuses": commitStatuses,
+                ]
+            )
+        } else {
+            MockURLProtocol.stub(urlContains: "/status", statusCode: statusCodeForCommitStatuses)
+        }
         MockURLProtocol.stub(
             urlContains: "/pulls/\(number)",
             json: [

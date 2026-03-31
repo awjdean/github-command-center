@@ -93,9 +93,51 @@ extension GitHubRESTClientTests {
         let details = try await client.fetchTokenAccessDetails()
 
         #expect(details.accessibleRepositories.count == 102)
+        #expect(details.accessibleRepositories.first?.fullName == "org/repo-1")
         #expect(details.accessibleRepositories.first?.accessLevel == .read)
+        #expect(details.accessibleRepositories[99].fullName == "org/repo-100")
         #expect(details.accessibleRepositories[100].fullName == "org/admin-repo")
         #expect(details.accessibleRepositories[100].accessLevel == .admin)
+        #expect(details.accessibleRepositories[101].fullName == "org/write-repo")
         #expect(details.accessibleRepositories[101].accessLevel == .write)
+    }
+
+    @Test
+    func fetchTokenAccessDetails_accessibleRepositoriesStopsAtConfiguredLimit() async throws {
+        let harness = Harness()
+        MockURLProtocol.stub(
+            urlContains: "/user",
+            json: ["login": "octocat"]
+        )
+
+        for page in 1...10 {
+            let repositories: [[String: Any]] = (1...100).map { offset in
+                let id = ((page - 1) * 100) + offset
+                return [
+                    "id": id,
+                    "full_name": "org/repo-\(id)",
+                    "permissions": [
+                        "admin": false,
+                        "push": false,
+                        "pull": true,
+                    ],
+                ]
+            }
+            MockURLProtocol.stub(
+                urlContains: "/user/repos?affiliation=owner,collaborator,organization_member&per_page=100&page=\(page)",
+                json: repositories
+            )
+        }
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
+        let details = try await client.fetchTokenAccessDetails()
+
+        #expect(details.accessibleRepositories.count == 1000)
+        #expect(details.accessibleRepositories.last?.fullName == "org/repo-1000")
+        #expect(
+            MockURLProtocol.capturedRequests.contains {
+                $0.url?.absoluteString.contains("page=11") == true
+            } == false
+        )
     }
 }

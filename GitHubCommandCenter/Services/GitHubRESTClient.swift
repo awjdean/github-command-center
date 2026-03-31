@@ -3,20 +3,39 @@ import Foundation
 actor GitHubRESTClient: GitHubDataSource {
     private static let searchResultsMaxPageLimit = 100
     private static let reviewMaxPageLimit = 10
+    private static let incompleteSearchWarningMessage =
+        "GitHub search results are temporarily incomplete. "
+        + "The token was saved, but full PR status access could not be verified yet."
+    private static let deferredValidationWarningMessage =
+        "Token saved, but full PR status access could not be verified yet. "
+        + "The warning will clear after a successful poll loads PR status data."
+
+    enum TokenValidationResult: Equatable, Sendable {
+        case verified(username: String)
+        case warning(username: String, message: String)
+    }
 
     private enum RequestError: Error {
         case app(AppError)
         case statusCode(Int)
     }
 
+    private static let maxCacheEntries = 500
+
     private let token: String
     private let session: URLSession
+    private let mergeabilityRetryDelayNanoseconds: UInt64
     private var etags: [URL: String] = [:]
     private var cachedResponses: [URL: Data] = [:]
 
-    init(token: String, session: URLSession = .shared) {
+    init(
+        token: String,
+        session: URLSession = .shared,
+        mergeabilityRetryDelayNanoseconds: UInt64 = 2_500_000_000
+    ) {
         self.token = token
         self.session = session
+        self.mergeabilityRetryDelayNanoseconds = mergeabilityRetryDelayNanoseconds
     }
 
     // MARK: - GitHubDataSource
@@ -27,10 +46,31 @@ actor GitHubRESTClient: GitHubDataSource {
         return user.login
     }
 
-    func validateTokenForAppAccess() async throws -> String {
+    func validateTokenForAppAccess() async throws -> TokenValidationResult {
         let username = try await validateToken()
-        _ = try await searchOpenPRsPage(username: username, perPage: 1, page: 1)
-        return username
+        let response = try await searchOpenPRsPage(
+            username: username,
+            perPage: 1,
+            page: 1,
+            treatIncompleteResultsAsError: false
+        )
+
+        if response.incompleteResults {
+            return .warning(
+                username: username,
+                message: Self.incompleteSearchWarningMessage
+            )
+        }
+
+        guard let firstPR = response.items.first else {
+            return .warning(
+                username: username,
+                message: Self.deferredValidationWarningMessage
+            )
+        }
+
+        try await probePRStatusAccess(using: firstPR)
+        return .verified(username: username)
     }
 
     func fetchTokenAccessDetails() async throws -> TokenAccessDetails {
@@ -82,7 +122,12 @@ actor GitHubRESTClient: GitHubDataSource {
 
     // MARK: - Search
 
-    private func searchOpenPRsPage(username: String, perPage: Int, page: Int) async throws -> SearchResponse {
+    private func searchOpenPRsPage(
+        username: String,
+        perPage: Int,
+        page: Int,
+        treatIncompleteResultsAsError: Bool = true
+    ) async throws -> SearchResponse {
         let query = "is:pr is:open involves:\(username)"
         guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
             throw AppError.networkError
@@ -90,7 +135,7 @@ actor GitHubRESTClient: GitHubDataSource {
         let path = "/search/issues?q=\(encoded)&per_page=\(perPage)&page=\(page)&sort=updated&order=desc"
         let data = try await get(path)
         let response = try decode(SearchResponse.self, from: data)
-        if response.incompleteResults {
+        if treatIncompleteResultsAsError, response.incompleteResults {
             throw AppError.incompleteSearchResults
         }
         return response
@@ -160,6 +205,17 @@ actor GitHubRESTClient: GitHubDataSource {
         )
     }
 
+    private func probePRStatusAccess(using item: SearchItem) async throws {
+        guard let repoFullName = extractRepoName(from: item.repositoryUrl),
+            let (owner, repo) = splitRepoFullName(repoFullName)
+        else {
+            return
+        }
+
+        let detail = try await fetchPRDetail(owner: owner, repo: repo, number: item.number)
+        _ = try await fetchCommitStatuses(owner: owner, repo: repo, sha: detail.head.sha)
+    }
+
     private func fetchPRDetail(
         owner: String,
         repo: String,
@@ -171,7 +227,7 @@ actor GitHubRESTClient: GitHubDataSource {
 
         // GitHub's mergeable field may be null while being computed — retry once after a delay
         if retryForMergeability, detail.mergeableState == nil {
-            try await Task.sleep(nanoseconds: 2_500_000_000)
+            try await Task.sleep(nanoseconds: mergeabilityRetryDelayNanoseconds)
             let retryData = try await get("/repos/\(owner)/\(repo)/pulls/\(number)")
             detail = try decode(PRDetail.self, from: retryData)
         }
@@ -239,15 +295,21 @@ actor GitHubRESTClient: GitHubDataSource {
 
     private func fetchAccessibleRepositories() async throws -> [TokenAccessDetails.AccessibleRepository] {
         let perPage = 100
+        let maxRepositories = 1_000
+        let maxPages = maxRepositories / perPage
         var page = 1
         var repositories: [TokenAccessDetails.AccessibleRepository] = []
 
-        while true {
+        while page <= maxPages {
             let path =
                 "/user/repos?affiliation=owner,collaborator,organization_member&per_page=\(perPage)&page=\(page)"
             let data = try await get(path)
             let pageRepositories = try decode([AccessibleRepositoryResponse].self, from: data)
             repositories.append(contentsOf: pageRepositories.map(\.tokenAccessRepository))
+
+            if repositories.count >= maxRepositories {
+                return Array(repositories.prefix(maxRepositories))
+            }
 
             if pageRepositories.count < perPage {
                 return repositories
@@ -255,6 +317,8 @@ actor GitHubRESTClient: GitHubDataSource {
 
             page += 1
         }
+
+        return repositories
     }
 
     // MARK: - State builders
@@ -264,41 +328,59 @@ actor GitHubRESTClient: GitHubDataSource {
         commitStatuses: [CommitStatus],
         combinedStatusState: String
     ) -> PRState.CIStatus {
-        let latestStatuses = deduplicatedCommitStatuses(commitStatuses)
-        let totalChecks = checkRuns.count + latestStatuses.count
-        guard totalChecks > 0 else { return .none }
+        let uniqueChecks = aggregatedCIChecks(from: checkRuns, commitStatuses: commitStatuses)
+        guard !uniqueChecks.isEmpty else { return .none }
 
-        let failingCheckRuns = checkRuns.filter { run in
-            run.status == "completed" && run.conclusion != "success" && run.conclusion != "skipped"
-                && run.conclusion != "neutral"
-        }
-        let failingCommitStatuses = latestStatuses.filter { ["error", "failure"].contains($0.state) }
-
-        let failingChecks: [PRState.FailingCheck] =
-            failingCheckRuns.map { run in
-                PRState.FailingCheck(
-                    name: run.name,
-                    conclusion: run.conclusion ?? "failure",
-                    url: run.htmlUrl.flatMap(URL.init(string:))
-                )
-            }
-            + failingCommitStatuses.map { status in
-                PRState.FailingCheck(
-                    name: status.context,
-                    conclusion: status.state,
-                    url: status.targetUrl.flatMap(URL.init(string:))
-                )
-            }
+        let failingChecks = uniqueChecks.compactMap(\.failingCheck)
         if !failingChecks.isEmpty {
-            return .failing(checks: failingChecks, totalChecks: totalChecks)
+            return .failing(checks: failingChecks, totalChecks: uniqueChecks.count)
         }
 
-        let hasPending = checkRuns.contains { $0.status != "completed" }
-        let hasPendingCommitStatus =
-            combinedStatusState == "pending" || latestStatuses.contains { $0.state == "pending" }
-        if hasPending || hasPendingCommitStatus { return .pending }
+        if uniqueChecks.contains(where: \.isPending) || combinedStatusState == "pending" {
+            return .pending
+        }
 
         return .passing
+    }
+
+    private func aggregatedCIChecks(
+        from checkRuns: [CheckRun],
+        commitStatuses: [CommitStatus]
+    ) -> [AggregatedCICheck] {
+        let latestStatuses = deduplicatedCommitStatuses(commitStatuses)
+        var orderedChecks: [AggregatedCICheck] = []
+        var indexByIdentifier: [String: Int] = [:]
+
+        func merge(_ check: AggregatedCICheck) {
+            if let index = indexByIdentifier[check.identifier] {
+                orderedChecks[index] = orderedChecks[index].merged(with: check)
+            } else {
+                indexByIdentifier[check.identifier] = orderedChecks.count
+                orderedChecks.append(check)
+            }
+        }
+
+        for run in checkRuns {
+            merge(
+                AggregatedCICheck(
+                    identifier: ciCheckIdentifier(name: run.name, urlString: run.htmlUrl),
+                    failingCheck: failingCheck(for: run),
+                    isPending: run.status != "completed"
+                )
+            )
+        }
+
+        for status in latestStatuses {
+            merge(
+                AggregatedCICheck(
+                    identifier: ciCheckIdentifier(name: status.context, urlString: status.targetUrl),
+                    failingCheck: failingCheck(for: status),
+                    isPending: status.state == "pending"
+                )
+            )
+        }
+
+        return orderedChecks
     }
 
     private func buildReviewStatus(reviews: [Review], requestedReviewers: [GitHubUser]) -> PRState.ReviewStatus {
@@ -357,6 +439,49 @@ actor GitHubRESTClient: GitHubDataSource {
         return latestStatuses
     }
 
+    private func failingCheck(for run: CheckRun) -> PRState.FailingCheck? {
+        guard run.status == "completed",
+            run.conclusion != "success",
+            run.conclusion != "skipped",
+            run.conclusion != "neutral"
+        else {
+            return nil
+        }
+
+        return PRState.FailingCheck(
+            name: run.name,
+            conclusion: run.conclusion ?? "failure",
+            url: run.htmlUrl.flatMap(URL.init(string:))
+        )
+    }
+
+    private func failingCheck(for status: CommitStatus) -> PRState.FailingCheck? {
+        guard ["error", "failure"].contains(status.state) else {
+            return nil
+        }
+
+        return PRState.FailingCheck(
+            name: status.context,
+            conclusion: status.state,
+            url: status.targetUrl.flatMap(URL.init(string:))
+        )
+    }
+
+    private func ciCheckIdentifier(name: String, urlString: String?) -> String {
+        if let urlString,
+            let url = URL(string: urlString)?.absoluteString.lowercased(),
+            !url.isEmpty
+        {
+            return "url:\(url)"
+        }
+
+        return "name:\(normalizedCheckName(name))"
+    }
+
+    private func normalizedCheckName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
     // MARK: - HTTP
 
     private func get(
@@ -378,39 +503,69 @@ actor GitHubRESTClient: GitHubDataSource {
         }
     }
 
-    private func requestData(
-        _ path: String,
-        allowRetryWithoutETag: Bool = true
-    ) async throws -> Data {
+    // MARK: - Request infrastructure
+
+    private func buildRequest(_ path: String) throws -> URLRequest {
         guard let url = URL(string: "https://api.github.com\(path)") else {
             throw RequestError.app(.networkError)
         }
-
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+        return request
+    }
 
-        if let etag = etags[url] {
-            request.setValue(etag, forHTTPHeaderField: "If-None-Match")
-        }
-
+    private func performRequest(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let (data, response): (Data, URLResponse)
         do {
             (data, response) = try await session.data(for: request)
         } catch {
             throw RequestError.app(.networkError)
         }
+        guard let http = response as? HTTPURLResponse else {
+            throw RequestError.app(.networkError)
+        }
+        return (data, http)
+    }
 
-        guard let http = response as? HTTPURLResponse else { throw RequestError.app(.networkError) }
+    private func checkForErrors(data: Data, response: HTTPURLResponse) throws {
+        switch response.statusCode {
+        case 200...299, 304:
+            return
+        case 401:
+            throw RequestError.statusCode(401)
+        case 403:
+            if isRateLimitedResponse(data, response) {
+                throw RequestError.app(.rateLimitExceeded(resetAt: rateLimitResetDate(from: response)))
+            }
+            throw RequestError.statusCode(403)
+        case 404:
+            throw RequestError.statusCode(404)
+        case 429:
+            throw RequestError.app(.rateLimitExceeded(resetAt: rateLimitResetDate(from: response)))
+        case 500...599:
+            throw RequestError.app(.serverError(statusCode: response.statusCode))
+        default:
+            throw RequestError.app(.networkError)
+        }
+    }
+
+    private func requestData(
+        _ path: String,
+        allowRetryWithoutETag: Bool = true
+    ) async throws -> Data {
+        var request = try buildRequest(path)
+        guard let url = request.url else { throw RequestError.app(.networkError) }
+
+        if let etag = etags[url] {
+            request.setValue(etag, forHTTPHeaderField: "If-None-Match")
+        }
+
+        let (data, http) = try await performRequest(request)
+        try checkForErrors(data: data, response: http)
 
         switch http.statusCode {
-        case 200:
-            if let etag = http.value(forHTTPHeaderField: "ETag") {
-                etags[url] = etag
-                cachedResponses[url] = data
-            }
-            return data
         case 304:
             if let cached = cachedResponses[url] { return cached }
             guard allowRetryWithoutETag else { throw RequestError.app(.networkError) }
@@ -424,65 +579,27 @@ actor GitHubRESTClient: GitHubDataSource {
                 }
                 throw error
             }
-        case 401:
-            throw RequestError.statusCode(401)
-        case 403:
-            if isRateLimitedResponse(data, http) {
-                throw RequestError.app(.rateLimitExceeded(resetAt: rateLimitResetDate(from: http)))
-            }
-            throw RequestError.statusCode(403)
-        case 404:
-            throw RequestError.statusCode(404)
-        case 429:
-            let resetAt = rateLimitResetDate(from: http)
-            throw RequestError.app(.rateLimitExceeded(resetAt: resetAt))
-        case 500...599:
-            throw RequestError.app(.serverError(statusCode: http.statusCode))
         default:
-            throw RequestError.app(.networkError)
+            if let etag = http.value(forHTTPHeaderField: "ETag") {
+                evictCacheIfNeeded()
+                etags[url] = etag
+                cachedResponses[url] = data
+            }
+            return data
         }
     }
 
+    private func evictCacheIfNeeded() {
+        guard cachedResponses.count > Self.maxCacheEntries else { return }
+        cachedResponses.removeAll(keepingCapacity: true)
+        etags.removeAll(keepingCapacity: true)
+    }
+
     private func requestResponse(_ path: String) async throws -> HTTPDataResponse {
-        guard let url = URL(string: "https://api.github.com\(path)") else {
-            throw RequestError.app(.networkError)
-        }
-
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
-
-        let (data, response): (Data, URLResponse)
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            throw RequestError.app(.networkError)
-        }
-
-        guard let http = response as? HTTPURLResponse else {
-            throw RequestError.app(.networkError)
-        }
-
-        switch http.statusCode {
-        case 200:
-            return HTTPDataResponse(data: data, response: http)
-        case 401:
-            throw RequestError.statusCode(401)
-        case 403:
-            if isRateLimitedResponse(data, http) {
-                throw RequestError.app(.rateLimitExceeded(resetAt: rateLimitResetDate(from: http)))
-            }
-            throw RequestError.statusCode(403)
-        case 404:
-            throw RequestError.statusCode(404)
-        case 429:
-            throw RequestError.app(.rateLimitExceeded(resetAt: rateLimitResetDate(from: http)))
-        case 500...599:
-            throw RequestError.app(.serverError(statusCode: http.statusCode))
-        default:
-            throw RequestError.app(.networkError)
-        }
+        let request = try buildRequest(path)
+        let (data, http) = try await performRequest(request)
+        try checkForErrors(data: data, response: http)
+        return HTTPDataResponse(data: data, response: http)
     }
 
     private func mapRequestError(_ error: Error) -> Error {
@@ -570,102 +687,5 @@ actor GitHubRESTClient: GitHubDataSource {
 
     private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         try Self.jsonDecoder.decode(type, from: data)
-    }
-
-    // MARK: - API response models
-
-    private struct APIErrorResponse: Codable, Sendable {
-        let message: String
-    }
-
-    private struct HTTPDataResponse {
-        let data: Data
-        let response: HTTPURLResponse
-    }
-
-    private struct GitHubUser: Codable, Sendable {
-        let login: String
-    }
-
-    private struct SearchResponse: Codable, Sendable {
-        let totalCount: Int
-        let incompleteResults: Bool
-        let items: [SearchItem]
-    }
-
-    private struct SearchItem: Codable, Sendable {
-        let number: Int
-        let title: String
-        let htmlUrl: String
-        let draft: Bool?
-        let updatedAt: String
-        let repositoryUrl: String
-    }
-
-    private struct PRDetail: Codable, Sendable {
-        let head: Head
-        let state: String
-        let user: GitHubUser
-        let assignees: [GitHubUser]
-        let requestedReviewers: [GitHubUser]
-        let mergeableState: String?
-
-        struct Head: Codable, Sendable {
-            let sha: String
-        }
-    }
-
-    private struct Review: Codable, Sendable {
-        let user: GitHubUser
-        let state: String
-    }
-
-    private struct CheckRunsResponse: Codable, Sendable {
-        let checkRuns: [CheckRun]
-    }
-
-    private struct CheckRun: Codable, Sendable {
-        let name: String
-        let status: String
-        let conclusion: String?
-        let htmlUrl: String?
-    }
-
-    private struct CombinedStatusResponse: Codable, Sendable {
-        let state: String
-        let statuses: [CommitStatus]
-    }
-
-    private struct CommitStatus: Codable, Sendable {
-        let context: String
-        let state: String
-        let targetUrl: String?
-    }
-
-    private struct AccessibleRepositoryResponse: Codable, Sendable {
-        let id: Int
-        let fullName: String
-        let permissions: RepositoryPermissions?
-
-        var tokenAccessRepository: TokenAccessDetails.AccessibleRepository {
-            TokenAccessDetails.AccessibleRepository(
-                id: id,
-                fullName: fullName,
-                accessLevel: accessLevel
-            )
-        }
-
-        private var accessLevel: TokenAccessDetails.AccessibleRepository.AccessLevel {
-            guard let permissions else { return .read }
-            if permissions.admin { return .admin }
-            if permissions.push { return .write }
-            return .read
-        }
-    }
-
-    private struct RepositoryPermissions: Codable, Sendable {
-        let admin: Bool
-        let push: Bool
-        let pull: Bool
     }
 }
