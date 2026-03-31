@@ -4,13 +4,13 @@ We want to build a macOS menu bar app, which provides a quick view of the status
 
 ### MVP
 
-- Show state of all open PRs.
+- [X] Show state of all open PRs.
     - Show PR number + start of title.
     - States: draft, open (no review submitted), waiting for review, review requested from me, reviewed: changes requested, reviewed: approved, assigned to PR (?), merged.
     - Show if a PR has merge conflicts, or failing GitHub actions or merge is blocked for another reason.
     - *Seems like there are multiple types of states: merge status (conflicts, failing actions, other blockers (e.g., conversation must be resolved), ready to merge, merged), reviews (waiting, requested, reviewed: changes requested, reviewed: approved), other (assigned to PR, unassigned from PR).*
     - Review-state precedence for MVP triage: `changes requested` wins over everything, then any currently outstanding review requests, then prior approvals. If a PR was approved and later new reviewers are requested, the PR should display as waiting for review until those requests are satisfied.
-- Button that opens the url of the PR in web browser.
+- [X] Button that opens the url of the PR in web browser.
 - Notification (including sound) when a tracked PR enters a status.
 
 ### V2
