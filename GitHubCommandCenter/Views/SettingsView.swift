@@ -1,3 +1,4 @@
+import OSLog
 import ServiceManagement
 import SwiftUI
 
@@ -7,6 +8,8 @@ enum SettingsLinks {
 }
 
 struct SettingsContentView: View {
+    private static let logger = Logger(subsystem: logSubsystem, category: "SettingsView")
+
     @EnvironmentObject var appState: AppState
     @State private var tokenInput = ""
     @State private var tokenState: TokenState = .empty
@@ -36,15 +39,20 @@ struct SettingsContentView: View {
         let message: String?
     }
 
+    struct TokenSaveSuccessOutcome: Equatable {
+        let tokenState: TokenState
+        let warningMessage: String?
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Spacing.xl) {
             tokenSection
             aboutSection
             if showsAppControls {
                 appControlsSection
             }
         }
-        .padding(24)
+        .padding(Spacing.xxl)
         .preferredColorScheme(.dark)
         .onAppear {
             launchAtLogin = (SMAppService.mainApp.status == .enabled)
@@ -76,12 +84,12 @@ struct SettingsContentView: View {
     }
 
     private func connectedView(username: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+            HStack(spacing: Spacing.md) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 16))
                     .foregroundColor(.statusGreen)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Spacing.micro) {
                     Text("@\(username)")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.textPrimary)
@@ -91,7 +99,7 @@ struct SettingsContentView: View {
                 }
                 Spacer()
             }
-            .padding(12)
+            .padding(Spacing.lg)
             .background(Color.statusGreen.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
@@ -99,12 +107,31 @@ struct SettingsContentView: View {
                     .stroke(Color.statusGreen.opacity(0.2), lineWidth: 1)
             )
 
+            if let tokenValidationWarningMessage = appState.tokenValidationWarningMessage {
+                HStack(alignment: .top, spacing: Spacing.xs) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.statusYellow)
+                    Text(tokenValidationWarningMessage)
+                        .font(.system(size: 11))
+                        .foregroundColor(.statusYellow)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(Spacing.md)
+                .background(Color.statusYellow.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.statusYellow.opacity(0.2), lineWidth: 1)
+                )
+            }
+
             tokenAccessSection
 
             Button(role: .destructive) {
                 clearToken()
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: Spacing.xxs) {
                     Image(systemName: "trash")
                         .font(.system(size: 10))
                     Text("Remove Token")
@@ -121,7 +148,7 @@ struct SettingsContentView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundColor(.textPrimary)
-                .padding(10)
+                .padding(Spacing.md)
                 .background(Color.black.opacity(0.25))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(
@@ -137,7 +164,7 @@ struct SettingsContentView: View {
                 }
 
             if case .invalid = tokenState {
-                HStack(spacing: 6) {
+                HStack(spacing: Spacing.xs) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 12))
                         .foregroundColor(.statusRed)
@@ -149,7 +176,7 @@ struct SettingsContentView: View {
             }
 
             if let tokenSaveErrorMessage {
-                HStack(spacing: 6) {
+                HStack(spacing: Spacing.xs) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 12))
                         .foregroundColor(.statusRed)
@@ -165,7 +192,7 @@ struct SettingsContentView: View {
 
             if let url = SettingsLinks.personalAccessTokens {
                 Link(destination: url) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: Spacing.xxs) {
                         Image(systemName: "arrow.up.right.square")
                             .font(.system(size: 10))
                         Text("Manage personal access tokens")
@@ -175,11 +202,11 @@ struct SettingsContentView: View {
                 }
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.sm) {
                 Button {
                     saveToken()
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: Spacing.xxs) {
                         if isValidating {
                             ProgressView()
                                 .controlSize(.small)
@@ -208,7 +235,7 @@ struct SettingsContentView: View {
     // MARK: - Scope Info
 
     private var scopeInfo: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
             Text("APP REQUIREMENTS")
                 .font(.system(size: 9, weight: .bold))
                 .tracking(1.2)
@@ -218,12 +245,14 @@ struct SettingsContentView: View {
                 scopes: [
                     .init(name: "Pull requests: Read"),
                     .init(name: "Commit statuses: Read"),
-                    .init(name: "Checks: Read"),
+                    .init(name: "Checks: Read", isOptional: true),
                 ]
             )
 
             Text(
                 "Grant repository access to every repo you want tracked. "
+                    + "Commit statuses are required for full verification. "
+                    + "Checks access is recommended for richer CI detail. "
                     + "This app shows pull requests involving the authenticated account."
             )
             .font(.system(size: 10))
@@ -233,7 +262,7 @@ struct SettingsContentView: View {
     }
 
     private func scopeRow(scopes: [ScopeItem]) -> some View {
-        FlowLayout(spacing: 4) {
+        FlowLayout(spacing: Spacing.xxs) {
             ForEach(scopes) { scope in
                 scopeBadge(scope.name, optional: scope.isOptional)
             }
@@ -243,7 +272,7 @@ struct SettingsContentView: View {
     @ViewBuilder
     private var tokenAccessSection: some View {
         if isLoadingTokenAccess {
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.sm) {
                 ProgressView()
                     .controlSize(.small)
                 Text("Loading token access…")
@@ -251,7 +280,7 @@ struct SettingsContentView: View {
                     .foregroundColor(.textSecondary)
             }
         } else if let tokenAccessDetails {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Spacing.lg) {
                 tokenPermissionsSection(details: tokenAccessDetails)
                 accessibleRepositoriesSection(details: tokenAccessDetails)
             }
@@ -264,7 +293,7 @@ struct SettingsContentView: View {
     }
 
     private func tokenPermissionsSection(details: TokenAccessDetails) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
             Text("REPORTED PERMISSIONS")
                 .font(.system(size: 9, weight: .bold))
                 .tracking(1.2)
@@ -286,7 +315,7 @@ struct SettingsContentView: View {
     }
 
     private func accessibleRepositoriesSection(details: TokenAccessDetails) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isReposExpanded.toggle()
@@ -316,7 +345,7 @@ struct SettingsContentView: View {
                         .font(.system(size: 10))
                         .foregroundColor(.textTertiary)
                 } else {
-                    VStack(spacing: 6) {
+                    VStack(spacing: Spacing.xs) {
                         ForEach(details.accessibleRepositories) { repository in
                             accessibleRepositoryRow(repository)
                         }
@@ -327,21 +356,21 @@ struct SettingsContentView: View {
     }
 
     private func accessibleRepositoryRow(_ repository: TokenAccessDetails.AccessibleRepository) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: Spacing.sm) {
             Text(repository.fullName)
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundColor(.textSecondary)
                 .lineLimit(1)
 
-            Spacer(minLength: 8)
+            Spacer(minLength: Spacing.sm)
 
             Text(repository.accessLevel.rawValue)
                 .font(.system(size: 9, weight: .semibold, design: .monospaced))
                 .foregroundColor(accessLevelColor(repository.accessLevel))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
+                .padding(.horizontal, Spacing.xs)
+                .padding(.vertical, Spacing.micro)
                 .background(accessLevelColor(repository.accessLevel).opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .clipShape(RoundedRectangle(cornerRadius: Spacing.xxs))
         }
     }
 
@@ -357,7 +386,7 @@ struct SettingsContentView: View {
     }
 
     private func scopeBadge(_ text: String, optional: Bool = false) -> some View {
-        HStack(spacing: 3) {
+        HStack(spacing: Spacing.xxxs) {
             Text(text)
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
             if optional {
@@ -368,11 +397,11 @@ struct SettingsContentView: View {
         }
         .foregroundColor(optional ? .textTertiary : .textSecondary)
         .padding(.horizontal, 7)
-        .padding(.vertical, 3)
+        .padding(.vertical, Spacing.xxxs)
         .background(Color.panelBackground.opacity(0.8))
-        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .clipShape(RoundedRectangle(cornerRadius: Spacing.xxs))
         .overlay(
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: Spacing.xxs)
                 .stroke(Color.textMuted.opacity(0.25), lineWidth: 0.5)
         )
     }
@@ -393,6 +422,12 @@ struct SettingsContentView: View {
                             try SMAppService.mainApp.unregister()
                         }
                     } catch {
+                        let errorDescription = error.localizedDescription
+                        Self.logger.error(
+                            "Launch at Login registration/unregistration failed "
+                                + "(enabled: \(enabled, privacy: .public)): "
+                                + "\(errorDescription, privacy: .public)"
+                        )
                         launchAtLogin = (SMAppService.mainApp.status == .enabled)
                     }
                 }
@@ -411,18 +446,18 @@ struct SettingsContentView: View {
 
     private var aboutSection: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
                 Text("GitHub Command Center")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.textPrimary)
-                HStack(spacing: 8) {
+                HStack(spacing: Spacing.sm) {
                     Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0")")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundColor(.textTertiary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
+                        .padding(.horizontal, Spacing.xs)
+                        .padding(.vertical, Spacing.micro)
                         .background(Color.panelBackground.opacity(0.8))
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                        .clipShape(RoundedRectangle(cornerRadius: Spacing.xxs))
                     Text("MIT License")
                         .font(.system(size: 11))
                         .foregroundColor(.textTertiary)
@@ -431,7 +466,7 @@ struct SettingsContentView: View {
             Spacer()
             if let url = SettingsLinks.projectRepository {
                 Link(destination: url) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: Spacing.xxs) {
                         Image(systemName: "arrow.up.right.square")
                             .font(.system(size: 10))
                         Text("View on GitHub")
@@ -465,7 +500,11 @@ struct SettingsContentView: View {
             }
         } catch {
             tokenInput = ""
-            tokenState = .invalid
+            tokenState = .empty
+            let errorDescription = error.localizedDescription
+            Self.logger.error(
+                "loadSavedToken Keychain read failed: \(errorDescription, privacy: .public)"
+            )
         }
     }
 
@@ -477,11 +516,13 @@ struct SettingsContentView: View {
             do {
                 clearTokenSaveValidationState()
                 let client = GitHubRESTClient(token: tokenInput)
-                let username = try await client.validateTokenForAppAccess()
+                let validationResult = try await client.validateTokenForAppAccess()
+                let successOutcome = Self.tokenSaveSuccessOutcome(for: validationResult)
                 try KeychainService.shared.saveToken(tokenInput)
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    tokenState = .valid(username: username)
+                    tokenState = successOutcome.tokenState
                 }
+                appState.tokenValidationWarningMessage = successOutcome.warningMessage
                 refreshTokenAccessDetails(using: tokenInput)
                 appState.resetPolling()
             } catch {
@@ -500,7 +541,10 @@ struct SettingsContentView: View {
         do {
             try KeychainService.shared.deleteToken()
         } catch {
-            print("Failed to delete token from keychain in clearToken: \(error.localizedDescription)")
+            let errorDescription = error.localizedDescription
+            Self.logger.error(
+                "clearToken Keychain deletion failed: \(errorDescription, privacy: .public)"
+            )
         }
         tokenInput = ""
         clearTokenSaveValidationState()
@@ -559,6 +603,23 @@ struct SettingsContentView: View {
         }
     }
 
+    static func tokenSaveSuccessOutcome(
+        for result: GitHubRESTClient.TokenValidationResult
+    ) -> TokenSaveSuccessOutcome {
+        switch result {
+        case .verified(let username):
+            return TokenSaveSuccessOutcome(
+                tokenState: .valid(username: username),
+                warningMessage: nil
+            )
+        case .warning(let username, let message):
+            return TokenSaveSuccessOutcome(
+                tokenState: .valid(username: username),
+                warningMessage: message
+            )
+        }
+    }
+
     static func tokenSaveFailureOutcome(for error: Error) -> TokenSaveFailureOutcome {
         if let appError = error as? AppError {
             switch appError {
@@ -589,104 +650,10 @@ struct SettingsContentView: View {
 @MainActor
 private func settingsPreviewAppState() -> AppState {
     let appState = AppState(
-        makePollingEngine: { _ in SettingsPreviewPollingController() },
+        makePollingEngine: { _ in NoOpPollingController() },
         requestNotificationPermission: {}
     )
     appState.isLoading = false
     appState.authenticationStatus = .noToken
     return appState
-}
-
-@MainActor
-private final class SettingsPreviewPollingController: PollingControlling {
-    func start() {}
-    func stop() {}
-    func reset() {}
-    func forceRefresh() {}
-}
-
-// MARK: - Supporting Types
-
-private struct ScopeItem: Identifiable {
-    var id: String { name }
-    let name: String
-    var isOptional: Bool = false
-}
-
-// MARK: - Settings Card
-
-private struct SettingsCardModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .padding(16)
-            .background(Color.panelSurface)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-extension View {
-    fileprivate func settingsCard() -> some View {
-        modifier(SettingsCardModifier())
-    }
-}
-
-// MARK: - Flow Layout
-
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = 4
-
-    struct Cache {
-        var size: CGSize
-        var positions: [CGPoint]
-    }
-
-    func makeCache(subviews: Subviews) -> Cache {
-        arrange(in: .infinity, subviews: subviews)
-    }
-
-    func updateCache(_ cache: inout Cache, subviews: Subviews) {
-        cache = arrange(in: .infinity, subviews: subviews)
-    }
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
-        cache = arrange(in: proposal.width ?? .infinity, subviews: subviews)
-        return cache.size
-    }
-
-    func placeSubviews(
-        in bounds: CGRect,
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout Cache
-    ) {
-        for (index, position) in cache.positions.enumerated() {
-            subviews[index].place(
-                at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y),
-                proposal: .unspecified
-            )
-        }
-    }
-
-    private func arrange(in maxWidth: CGFloat, subviews: Subviews) -> Cache {
-        var positions: [CGPoint] = []
-        var currentX: CGFloat = 0
-        var currentY: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var totalWidth: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if currentX + size.width > maxWidth, currentX > 0 {
-                currentX = 0
-                currentY += rowHeight + spacing
-                rowHeight = 0
-            }
-            positions.append(CGPoint(x: currentX, y: currentY))
-            rowHeight = max(rowHeight, size.height)
-            currentX += size.width + spacing
-            totalWidth = max(totalWidth, currentX - spacing)
-        }
-
-        return Cache(size: CGSize(width: totalWidth, height: currentY + rowHeight), positions: positions)
-    }
 }

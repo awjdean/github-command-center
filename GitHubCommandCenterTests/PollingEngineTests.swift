@@ -259,6 +259,30 @@ struct PollingEngineTests {
     }
 
     @Test
+    func poll_successWithNoPRs_keepsTokenValidationWarning() async {
+        let harness = Harness()
+        harness.appState.authenticationStatus = .authenticated(username: "octocat")
+        harness.appState.tokenValidationWarningMessage = "Still verifying"
+        harness.mockSource.fetchResult = .success([])
+
+        await harness.engine.poll()
+
+        #expect(harness.appState.tokenValidationWarningMessage == "Still verifying")
+    }
+
+    @Test
+    func poll_successWithPRs_clearsTokenValidationWarning() async {
+        let harness = Harness()
+        harness.appState.authenticationStatus = .authenticated(username: "octocat")
+        harness.appState.tokenValidationWarningMessage = "Still verifying"
+        harness.mockSource.fetchResult = .success([.fixture(number: 7)])
+
+        await harness.engine.poll()
+
+        #expect(harness.appState.tokenValidationWarningMessage == nil)
+    }
+
+    @Test
     func reset_clearsPreviousPRsBeforeNextPoll() async {
         let harness = Harness()
         let pr = PRState.fixture(number: 99)
@@ -305,6 +329,7 @@ struct PollingEngineTests {
         harness.appState.error = .rateLimitExceeded(resetAt: Date().addingTimeInterval(60))
         harness.appState.isStale = true
         harness.appState.authenticationStatus = .authenticated(username: "octocat")
+        harness.appState.tokenValidationWarningMessage = "Still verifying"
 
         harness.appState.clearSessionStateForNewSession()
 
@@ -316,6 +341,7 @@ struct PollingEngineTests {
         #expect(harness.appState.rateLimitResetDate == nil)
         #expect(harness.appState.isStale == false)
         #expect(harness.appState.isLoading)
+        #expect(harness.appState.tokenValidationWarningMessage == nil)
 
         if case .unknown = harness.appState.authenticationStatus {
         } else {

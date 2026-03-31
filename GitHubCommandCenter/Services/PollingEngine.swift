@@ -37,6 +37,9 @@ final class PollingEngine: PollingControlling {
         pollingTask = nil
     }
 
+    /// Clears session-scoped tracking state but does not cancel `pollingTask`.
+    /// Callers that need to halt polling pair this with `stop()`, such as
+    /// `AppState.stopPollingForMissingToken()` and `AppState.resetPolling()`.
     func reset() {
         clearRecentlyClosedTask?.cancel()
         clearRecentlyClosedTask = nil
@@ -118,9 +121,8 @@ final class PollingEngine: PollingControlling {
 
             let newPRs = try await client.fetchAllPRStates(username: username)
 
-            let disappeared = previousPRs.filter { prev in
-                !newPRs.contains { $0.id == prev.id }
-            }
+            let newIDs = Set(newPRs.map(\.id))
+            let disappeared = previousPRs.filter { !newIDs.contains($0.id) }
             let recentlyClosed = await client.resolveDisappearedPRs(disappeared)
 
             if !previousPRs.isEmpty {
@@ -145,6 +147,9 @@ final class PollingEngine: PollingControlling {
 
             if newPRs != previousPRs {
                 appState.prs = newPRs
+            }
+            if !newPRs.isEmpty {
+                appState.tokenValidationWarningMessage = nil
             }
             appState.lastUpdated = Date()
             if appState.isLoading { appState.isLoading = false }

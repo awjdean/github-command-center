@@ -10,6 +10,14 @@ protocol PollingControlling: AnyObject {
 }
 
 @MainActor
+final class NoOpPollingController: PollingControlling {
+    func start() {}
+    func stop() {}
+    func reset() {}
+    func forceRefresh() {}
+}
+
+@MainActor
 final class AppState: ObservableObject {
     @Published var prs: [PRState] = [] {
         didSet {
@@ -22,6 +30,7 @@ final class AppState: ObservableObject {
     @Published var error: AppError?
     @Published var isStale = false
     @Published var authenticationStatus: AuthStatus = .unknown
+    @Published var tokenValidationWarningMessage: String?
 
     var isRateLimited: Bool {
         if case .rateLimitExceeded = error { return true } else { return false }
@@ -144,7 +153,7 @@ final class AppState: ObservableObject {
         self.preloadTokenIfNeeded = preloadTokenIfNeeded
     }
 
-    private func clearPublishedSessionState() {
+    private func clearPublishedSessionState(preserveTokenValidationWarning: Bool = false) {
         prs = []
         recentlyClosedPRs = []
         lastUpdated = nil
@@ -152,13 +161,16 @@ final class AppState: ObservableObject {
         error = nil
         isStale = false
         authenticationStatus = .unknown
+        if !preserveTokenValidationWarning {
+            tokenValidationWarningMessage = nil
+        }
     }
 
     private func recomputePRCaches() {
         cachedNeedsActionPRs =
             prs
             .filter { $0.triageCategory == .needsYourAction }
-            .sorted(by: PRState.compareForNeedsAction)
+            .sorted(using: PRState.needsActionComparator)
         cachedWaitingOnOthersPRs =
             prs
             .filter { $0.triageCategory == .waitingOnOthers }
@@ -208,7 +220,7 @@ final class AppState: ObservableObject {
     func resetPolling() {
         pollingEngine?.reset()
         pollingEngine?.stop()
-        clearPublishedSessionState()
+        clearPublishedSessionState(preserveTokenValidationWarning: true)
         pollingEngine = nil
         startPollingIfNeeded()
     }
