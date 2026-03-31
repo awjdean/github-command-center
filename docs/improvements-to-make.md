@@ -41,7 +41,7 @@
 
 
 # Dev
-- [ ] GitHub actions for lint + check.
+- [X] GitHub actions for lint + check.
 
 
 # Manual checks
