@@ -4,10 +4,13 @@ import OSLog
 // swiftlint:disable file_length type_body_length
 
 actor GitHubRESTClient: GitHubDataSource {
+    private static let searchResultCap = 1_000
     private static let searchResultsMaxPageLimit = 100
     private static let reviewMaxPageLimit = 10
     private static let checkRunsMaxPageLimit = 10
     private static let logger = Logger(subsystem: Log.subsystem, category: "GitHubRESTClient")
+    private static let searchCapWarningMessage =
+        "Showing the first 1,000 matching pull requests due to GitHub search limits."
     private static let incompleteSearchWarningMessage =
         "GitHub search results are temporarily incomplete. "
         + "The token was saved, but full PR status access could not be verified yet."
@@ -28,6 +31,11 @@ actor GitHubRESTClient: GitHubDataSource {
     private struct CachedResponseEntry {
         let data: Data
         let etag: String
+    }
+
+    private struct SearchItemsResult {
+        let items: [SearchItem]
+        let warningMessage: String?
     }
 
     private struct LRUCache<Key: Hashable, Value> {
@@ -197,10 +205,11 @@ actor GitHubRESTClient: GitHubDataSource {
         )
     }
 
-    func fetchAllPRStates(username: String) async throws -> [PRState] {
-        let searchItems = try await searchOpenPRs(username: username)
+    func fetchAllPRStates(username: String) async throws -> PRFetchResult {
+        let searchResult = try await searchOpenPRs(username: username)
+        let searchItems = searchResult.items
         let maxConcurrency = 8
-        return try await withThrowingTaskGroup(of: PRState?.self) { group in
+        let prs = try await withThrowingTaskGroup(of: PRState?.self) { group in
             var results: [PRState] = []
             var index = 0
 
@@ -224,6 +233,8 @@ actor GitHubRESTClient: GitHubDataSource {
 
             return results
         }
+
+        return PRFetchResult(prs: prs, warningMessage: searchResult.warningMessage)
     }
 
     func resolveDisappearedPRs(_ prs: [PRState]) async -> [PRState] {
@@ -267,22 +278,31 @@ actor GitHubRESTClient: GitHubDataSource {
         return response
     }
 
-    private func searchOpenPRs(username: String, perPage: Int = 100) async throws -> [SearchItem] {
+    private func searchOpenPRs(username: String, perPage: Int = 100) async throws -> SearchItemsResult {
         var allItems: [SearchItem] = []
         var page = 1
+        var warningMessage: String?
 
         while true {
             guard page <= Self.searchResultsMaxPageLimit else {
                 throw AppError.paginationLimitExceeded
             }
             let response = try await searchOpenPRsPage(username: username, perPage: perPage, page: page)
+            if response.totalCount > Self.searchResultCap {
+                warningMessage = Self.searchCapWarningMessage
+            }
 
-            allItems.append(contentsOf: response.items)
-            if allItems.count >= response.totalCount || response.items.count < perPage { break }
+            let remainingCapacity = Self.searchResultCap - allItems.count
+            guard remainingCapacity > 0 else { break }
+
+            allItems.append(contentsOf: response.items.prefix(remainingCapacity))
+            if allItems.count >= min(response.totalCount, Self.searchResultCap) || response.items.count < perPage {
+                break
+            }
             page += 1
         }
 
-        return allItems
+        return SearchItemsResult(items: allItems, warningMessage: warningMessage)
     }
 
     // MARK: - PR state building
@@ -352,7 +372,7 @@ actor GitHubRESTClient: GitHubDataSource {
         var detail = try decode(PRDetail.self, from: data)
 
         // GitHub's mergeable field may be null or "unknown" while being computed — retry once after a delay
-        if retryForMergeability, detail.mergeableState == nil || detail.mergeableState == "unknown" {
+        if retryForMergeability && (detail.mergeableState == nil || detail.mergeableState == "unknown") {
             try await Task.sleep(nanoseconds: mergeabilityRetryDelayNanoseconds)
             let retryData = try await get("/repos/\(owner)/\(repo)/pulls/\(number)")
             detail = try decode(PRDetail.self, from: retryData)

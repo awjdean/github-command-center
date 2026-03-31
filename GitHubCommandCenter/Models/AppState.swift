@@ -90,6 +90,7 @@ final class AppState {
         var recentlyClosedPRs: [PRState] = []
         var lastUpdated: Date?
         var isLoading = true
+        var warningMessage: String?
         var error: AppError?
         var isStale = false
     }
@@ -158,6 +159,11 @@ final class AppState {
     var error: AppError? {
         get { panel.error }
         set { panel.error = newValue }
+    }
+
+    var warningMessage: String? {
+        get { panel.warningMessage }
+        set { panel.warningMessage = newValue }
     }
 
     var isStale: Bool {

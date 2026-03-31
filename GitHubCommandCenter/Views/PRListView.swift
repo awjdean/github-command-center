@@ -65,9 +65,9 @@ struct PRListView: View {
                 .help("Back")
             }
 
-            VStack(alignment: .leading, spacing: Spacing.hairline) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 Text(panelMode.headerTitle)
-                    .font(.panelTitle)
+                    .font(Theme.Fonts.panelTitle)
                     .foregroundColor(Theme.Colors.textPrimary)
                 panelSubtitleView
             }
@@ -85,8 +85,8 @@ struct PRListView: View {
                 .help("Settings")
             }
         }
-        .padding(.horizontal, Spacing.xl)
-        .padding(.vertical, Spacing.lg)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, Theme.Spacing.lg)
     }
 
     private var panelSubtitle: String {
@@ -108,10 +108,10 @@ struct PRListView: View {
                 .foregroundColor(Theme.Colors.textMuted)
                 + Text("\(actionCount) need attention")
                 .foregroundColor(Theme.Colors.statusYellow))
-                .font(.panelSubtitle)
+                .font(Theme.Fonts.panelSubtitle)
         } else if !panelSubtitle.isEmpty {
             Text(panelSubtitle)
-                .font(.panelSubtitle)
+                .font(Theme.Fonts.panelSubtitle)
                 .foregroundColor(Theme.Colors.textTertiary)
         }
     }
@@ -130,6 +130,13 @@ struct PRListView: View {
             } else if appState.isStale {
                 warningBar(
                     text: "Data may be outdated — last update \(formattedLastUpdated)",
+                    color: Theme.Colors.statusYellow
+                )
+            }
+
+            if let warningMessage = appState.warningMessage {
+                warningBar(
+                    text: warningMessage,
                     color: Theme.Colors.statusYellow
                 )
             }
@@ -212,13 +219,13 @@ struct PRListView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.sectionLabel)
+            .font(Theme.Fonts.sectionLabel)
             .tracking(1)
             .foregroundColor(Theme.Colors.textMuted)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Spacing.xl)
-            .padding(.top, Spacing.md)
-            .padding(.bottom, Spacing.xxs)
+            .padding(.horizontal, Theme.Spacing.xl)
+            .padding(.top, Theme.Spacing.md)
+            .padding(.bottom, Theme.Spacing.xxs)
     }
 
     // MARK: - Loading skeleton
@@ -235,62 +242,62 @@ struct PRListView: View {
     // MARK: - Empty state
 
     private var emptyStateView: some View {
-        VStack(spacing: Spacing.sm) {
+        VStack(spacing: Theme.Spacing.sm) {
             Image(systemName: "checkmark.circle")
                 .font(.system(size: 28))
                 .foregroundColor(Theme.Colors.statusGreen)
             Text("No tracked pull requests right now.")
-                .font(.prTitle)
+                .font(Theme.Fonts.prTitle)
                 .foregroundColor(Theme.Colors.textSecondary)
             if let emptyStateMessage = appState.emptyStateMessage {
                 Text(emptyStateMessage)
-                    .font(.footerText)
+                    .font(Theme.Fonts.footerText)
                     .foregroundColor(Theme.Colors.textTertiary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, Spacing.xxl)
+                    .padding(.horizontal, Theme.Spacing.xxl)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, Spacing.xxxl)
+        .padding(.vertical, Theme.Spacing.xxxl)
     }
 
     private var setupStateView: some View {
-        VStack(spacing: Spacing.sm) {
+        VStack(spacing: Theme.Spacing.sm) {
             Image(systemName: "key.fill")
                 .font(.system(size: 28))
                 .foregroundColor(Theme.Colors.statusYellow)
             Text("Add a GitHub token in Settings to start tracking pull requests.")
-                .font(.prTitle)
+                .font(Theme.Fonts.prTitle)
                 .foregroundColor(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, Spacing.xxl)
-        .padding(.vertical, Spacing.xxxl)
+        .padding(.horizontal, Theme.Spacing.xxl)
+        .padding(.vertical, Theme.Spacing.xxxl)
     }
 
     private var authFailedStateView: some View {
-        VStack(spacing: Spacing.sm) {
+        VStack(spacing: Theme.Spacing.sm) {
             Image(systemName: "exclamationmark.circle")
                 .font(.system(size: 28))
                 .foregroundColor(Theme.Colors.statusRed)
             Text("Update your GitHub token in Settings to resume tracking pull requests.")
-                .font(.prTitle)
+                .font(Theme.Fonts.prTitle)
                 .foregroundColor(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, Spacing.xxl)
-        .padding(.vertical, Spacing.xxxl)
+        .padding(.horizontal, Theme.Spacing.xxl)
+        .padding(.vertical, Theme.Spacing.xxxl)
     }
 
     private var loadErrorStateView: some View {
-        VStack(spacing: Spacing.md) {
+        VStack(spacing: Theme.Spacing.md) {
             Image(systemName: "wifi.exclamationmark")
                 .font(.system(size: 28))
                 .foregroundColor(Theme.Colors.statusRed)
             Text(appState.error?.errorDescription ?? "Unable to load pull requests right now.")
-                .font(.prTitle)
+                .font(Theme.Fonts.prTitle)
                 .foregroundColor(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
             Button("Retry") {
@@ -299,8 +306,8 @@ struct PRListView: View {
             .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, Spacing.xxl)
-        .padding(.vertical, Spacing.xxxl)
+        .padding(.horizontal, Theme.Spacing.xxl)
+        .padding(.vertical, Theme.Spacing.xxxl)
     }
 
     // MARK: - Error banners
@@ -328,20 +335,20 @@ struct PRListView: View {
             Image(systemName: icon)
                 .foregroundColor(color)
             Text(text)
-                .font(.footerText)
+                .font(Theme.Fonts.footerText)
                 .foregroundColor(Theme.Colors.textSecondary)
             Spacer()
             Button {
                 panelMode = .settings
             } label: {
                 Text(buttonLabel)
-                    .font(.footerText)
+                    .font(Theme.Fonts.footerText)
                     .foregroundColor(Theme.Colors.linkBlue)
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, Spacing.xl)
-        .padding(.vertical, Spacing.sm)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, Theme.Spacing.sm)
         .background(color.opacity(0.15))
     }
 
@@ -351,12 +358,12 @@ struct PRListView: View {
                 .font(.system(size: 10))
                 .foregroundColor(color)
             Text(text)
-                .font(.footerText)
+                .font(Theme.Fonts.footerText)
                 .foregroundColor(Theme.Colors.textSecondary)
             Spacer()
         }
-        .padding(.horizontal, Spacing.xl)
-        .padding(.vertical, Spacing.xs)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, Theme.Spacing.xs)
         .background(color.opacity(0.12))
     }
 
@@ -371,11 +378,11 @@ struct PRListView: View {
                 HStack {
                     if appState.lastUpdated != nil {
                         Text("Updated \(formattedLastUpdated)")
-                            .font(.footerText)
+                            .font(Theme.Fonts.footerText)
                             .foregroundColor(Theme.Colors.textMuted)
                     } else {
                         Text(appState.isLoading ? "Loading…" : "Never updated")
-                            .font(.footerText)
+                            .font(Theme.Fonts.footerText)
                             .foregroundColor(Theme.Colors.textMuted)
                     }
 
@@ -392,8 +399,8 @@ struct PRListView: View {
                     .help("Refresh (⌘R)")
                     .keyboardShortcut("r", modifiers: .command)
                 }
-                .padding(.horizontal, Spacing.xl)
-                .padding(.vertical, Spacing.sm)
+                .padding(.horizontal, Theme.Spacing.xl)
+                .padding(.vertical, Theme.Spacing.sm)
             }
         }
     }
@@ -514,8 +521,8 @@ private struct SkeletonRowView: View {
     }
 
     private var skeletonContent: some View {
-        HStack(spacing: Spacing.sm) {
-            VStack(alignment: .leading, spacing: Spacing.xs) {
+        HStack(spacing: Theme.Spacing.sm) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 RoundedRectangle(cornerRadius: 3).fill(shimmerColor).frame(width: 60, height: 10)
                 RoundedRectangle(cornerRadius: 3).fill(shimmerColor).frame(
                     maxWidth: .infinity,
@@ -533,8 +540,8 @@ private struct SkeletonRowView: View {
                 }
             }
         }
-        .padding(.horizontal, Spacing.xl)
-        .padding(.vertical, Spacing.sm)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, Theme.Spacing.sm)
     }
 
     private var shimmerColor: Color {

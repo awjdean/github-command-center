@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 @MainActor
 final class PollingEngine: PollingControlling {
@@ -10,6 +11,7 @@ final class PollingEngine: PollingControlling {
 
     private let appState: AppState
     private let recentlyClosedClearDelay: TimeInterval
+    private static let logger = Logger(subsystem: Log.subsystem, category: "PollingEngine")
     private(set) var client: (any GitHubDataSource)?
     private var pollingTask: Task<Void, Never>?
     private var clearRecentlyClosedTask: Task<Void, Never>?
@@ -96,6 +98,9 @@ final class PollingEngine: PollingControlling {
                 }
                 client = GitHubRESTClient(token: token)
             } catch {
+                Self.logger.error(
+                    "Failed to load token from keychain before polling: \(String(describing: error), privacy: .public)"
+                )
                 await handleAuthFailure(status: .failed, error: .authError, context: &context)
                 return .stopLoop
             }
@@ -112,7 +117,8 @@ final class PollingEngine: PollingControlling {
                 context.auth.authenticationStatus = .authenticated(username: username)
             }
 
-            let newPRs = try await client.fetchAllPRStates(username: username)
+            let fetchResult = try await client.fetchAllPRStates(username: username)
+            let newPRs = fetchResult.prs
             let newIDs = Set(newPRs.map(\.id))
             let disappeared = previousPRs.filter { !newIDs.contains($0.id) }
             let recentlyClosed = await client.resolveDisappearedPRs(disappeared)
@@ -129,6 +135,7 @@ final class PollingEngine: PollingControlling {
             context.panel.recentlyClosedPRs = recentlyClosed
             context.panel.lastUpdated = Date()
             context.panel.isLoading = false
+            context.panel.warningMessage = fetchResult.warningMessage
             context.panel.error = nil
             context.panel.isStale = false
 
@@ -145,51 +152,23 @@ final class PollingEngine: PollingControlling {
             await appState.applyPollSnapshot(.init(panel: context.panel, auth: context.auth))
             return .useRegularInterval
 
-        } catch AppError.authError {
-            await handleAuthFailure(status: .failed, error: .authError, context: &context)
-            return .stopLoop
-
-        } catch AppError.noToken {
-            await handleAuthFailure(status: .noToken, error: .noToken, context: &context)
-            return .stopLoop
-
-        } catch AppError.rateLimitExceeded(let rateLimit) {
-            context.panel.error = .rateLimitExceeded(rateLimit)
-            context.panel.isLoading = false
-            context.panel.isStale = AppState.staleStatus(lastUpdated: context.panel.lastUpdated)
-            await appState.applyPollSnapshot(.init(panel: context.panel, auth: context.auth))
-
-            let delay = min(max(rateLimit.resetAt.timeIntervalSinceNow + 5, 60), 3600)
-            stop()
-            pollingTask = Task {
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                guard !Task.isCancelled else { return }
-
-                var recoveryContext = await self.appState.currentPollContext()
-                recoveryContext.panel.error = nil
-                recoveryContext.panel.isStale = AppState.staleStatus(lastUpdated: recoveryContext.panel.lastUpdated)
-                await self.appState.applyPollSnapshot(.init(panel: recoveryContext.panel, auth: recoveryContext.auth))
-                await self.runLoop()
+        } catch let error as AppError {
+            switch error {
+            case .authError:
+                await handleAuthFailure(status: .failed, error: .authError, context: &context)
+                return .stopLoop
+            case .noToken:
+                await handleAuthFailure(status: .noToken, error: .noToken, context: &context)
+                return .stopLoop
+            case .rateLimitExceeded(let rateLimit):
+                return await handleRateLimitExceeded(rateLimit, context: &context)
+            case .incompleteSearchResults, .paginationLimitExceeded:
+                return await handleRegularPollError(error, context: &context)
+            case .networkError, .serverError:
+                return await handleImmediateRetryError(error, context: &context)
             }
-            return .stopLoop
-
-        } catch AppError.incompleteSearchResults {
-            context.panel.error = .incompleteSearchResults
-            context.panel.isLoading = false
-            context.panel.isStale = AppState.staleStatus(lastUpdated: context.panel.lastUpdated)
-            await appState.applyPollSnapshot(.init(panel: context.panel, auth: context.auth))
-            return .useRegularInterval
-
         } catch {
-            consecutiveFailures += 1
-            context.panel.error = .networkError
-            context.panel.isLoading = false
-            context.panel.isStale = AppState.staleStatus(lastUpdated: context.panel.lastUpdated)
-            await appState.applyPollSnapshot(.init(panel: context.panel, auth: context.auth))
-
-            let backoff = min(Double(2 << min(consecutiveFailures, 5)), 60.0)
-            try? await Task.sleep(nanoseconds: UInt64(backoff * 1_000_000_000))
-            return .continueImmediately
+            return await handleImmediateRetryError(.networkError, context: &context)
         }
     }
 
@@ -204,6 +183,59 @@ final class PollingEngine: PollingControlling {
         context.panel.isStale = AppState.staleStatus(lastUpdated: context.panel.lastUpdated)
         await appState.applyPollSnapshot(.init(panel: context.panel, auth: context.auth))
         stop()
+    }
+
+    private func handleRateLimitExceeded(
+        _ rateLimit: AppError.RateLimitContext,
+        context: inout AppState.PollContext
+    ) async -> PollOutcome {
+        consecutiveFailures = 0
+        await applyPollingError(.rateLimitExceeded(rateLimit), context: &context)
+
+        let delay = min(max(rateLimit.resetAt.timeIntervalSinceNow + 5, 60), 3600)
+        stop()
+        pollingTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+
+            var recoveryContext = await self.appState.currentPollContext()
+            recoveryContext.panel.error = nil
+            recoveryContext.panel.isStale = AppState.staleStatus(lastUpdated: recoveryContext.panel.lastUpdated)
+            await self.appState.applyPollSnapshot(.init(panel: recoveryContext.panel, auth: recoveryContext.auth))
+            await self.runLoop()
+        }
+        return .stopLoop
+    }
+
+    private func handleRegularPollError(
+        _ error: AppError,
+        context: inout AppState.PollContext
+    ) async -> PollOutcome {
+        consecutiveFailures = 0
+        await applyPollingError(error, context: &context)
+        return .useRegularInterval
+    }
+
+    private func handleImmediateRetryError(
+        _ error: AppError,
+        context: inout AppState.PollContext
+    ) async -> PollOutcome {
+        consecutiveFailures += 1
+        await applyPollingError(error, context: &context)
+
+        let backoff = min(Double(2 << min(consecutiveFailures, 5)), 60.0)
+        try? await Task.sleep(nanoseconds: UInt64(backoff * 1_000_000_000))
+        return .continueImmediately
+    }
+
+    private func applyPollingError(
+        _ error: AppError,
+        context: inout AppState.PollContext
+    ) async {
+        context.panel.error = error
+        context.panel.isLoading = false
+        context.panel.isStale = AppState.staleStatus(lastUpdated: context.panel.lastUpdated)
+        await appState.applyPollSnapshot(.init(panel: context.panel, auth: context.auth))
     }
 
     private func scheduleRecentlyClosedClearTask() {
