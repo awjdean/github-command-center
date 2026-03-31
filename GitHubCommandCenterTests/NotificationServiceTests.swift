@@ -16,7 +16,7 @@ struct NotificationServiceTests {
     }
 
     @Test
-    func notification_ciPassingToFailing_yourPR_fires() {
+    func notification_ciPassingToFailing_yourPR_fires() throws {
         let harness = Harness()
         let old = PRState.fixture(ciStatus: .passing, createdByMe: true)
         let new = PRState.fixture(
@@ -26,7 +26,7 @@ struct NotificationServiceTests {
 
         harness.service.checkTransitions(from: [old], to: [new], disappeared: [])
 
-        #expect(harness.fired.count == 1)
+        try #require(harness.fired.count == 1)
         #expect(harness.fired[0].1.contains("unit-tests"))
     }
 
@@ -59,7 +59,7 @@ struct NotificationServiceTests {
     }
 
     @Test
-    func notification_ciPendingToFailing_yourPR_fires() {
+    func notification_ciPendingToFailing_yourPR_fires() throws {
         let harness = Harness()
         let old = PRState.fixture(ciStatus: .pending, createdByMe: true)
         let new = PRState.fixture(
@@ -69,7 +69,7 @@ struct NotificationServiceTests {
 
         harness.service.checkTransitions(from: [old], to: [new], disappeared: [])
 
-        #expect(harness.fired.count == 1)
+        try #require(harness.fired.count == 1)
         #expect(harness.fired[0].1.contains("build"))
     }
 
@@ -91,7 +91,7 @@ struct NotificationServiceTests {
     }
 
     @Test
-    func notification_changesRequested_yourPR_fires() {
+    func notification_changesRequested_yourPR_fires() throws {
         let harness = Harness()
         let old = PRState.fixture(reviewStatus: .none, createdByMe: true)
         let new = PRState.fixture(
@@ -101,7 +101,7 @@ struct NotificationServiceTests {
 
         harness.service.checkTransitions(from: [old], to: [new], disappeared: [])
 
-        #expect(harness.fired.count == 1)
+        try #require(harness.fired.count == 1)
         #expect(harness.fired[0].1.contains("@alice"))
     }
 
@@ -117,14 +117,14 @@ struct NotificationServiceTests {
     }
 
     @Test
-    func notification_approved_yourPR_fires() {
+    func notification_approved_yourPR_fires() throws {
         let harness = Harness()
         let old = PRState.fixture(reviewStatus: .requested(by: ["alice"]), createdByMe: true)
         let new = PRState.fixture(reviewStatus: .approved(by: ["alice"]), createdByMe: true)
 
         harness.service.checkTransitions(from: [old], to: [new], disappeared: [])
 
-        #expect(harness.fired.count == 1)
+        try #require(harness.fired.count == 1)
         #expect(harness.fired[0].1.contains("@alice"))
     }
 
@@ -184,13 +184,13 @@ struct NotificationServiceTests {
     }
 
     @Test
-    func notification_disappearedPR_createdByMe_fires() {
+    func notification_disappearedPR_createdByMe_fires() throws {
         let harness = Harness()
         let disappeared = PRState.fixture(number: 99, title: "Old PR", createdByMe: true)
 
         harness.service.checkTransitions(from: [disappeared], to: [], disappeared: [disappeared])
 
-        #expect(harness.fired.count == 1)
+        try #require(harness.fired.count == 1)
         #expect(harness.fired[0].0.contains("99"))
     }
 

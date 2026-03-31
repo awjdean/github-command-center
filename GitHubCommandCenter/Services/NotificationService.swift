@@ -4,9 +4,14 @@ import UserNotifications
 final class NotificationService {
     static let shared = NotificationService()
     private static let pullRequestUpdatesThreadIdentifier = "pull_request_updates"
+    private let stateQueue = DispatchQueue(label: "NotificationService.state")
+    private var storedNotificationHandler: ((String, String) -> Void)?
 
     // Injected in tests to capture fired notifications without UNUserNotificationCenter.
-    var notificationHandler: ((String, String) -> Void)?  // (title, body)
+    var notificationHandler: ((String, String) -> Void)? {  // (title, body)
+        get { stateQueue.sync { storedNotificationHandler } }
+        set { stateQueue.sync { storedNotificationHandler = newValue } }
+    }
 
     init() {}
 
@@ -17,7 +22,7 @@ final class NotificationService {
 
     // Detects state transitions between two poll cycles and fires notifications.
     func checkTransitions(from oldPRs: [PRState], to newPRs: [PRState], disappeared: [PRState]) {
-        let oldByID = Dictionary(uniqueKeysWithValues: oldPRs.map { ($0.id, $0) })
+        let oldByID = Self.prsByID(oldPRs)
 
         for new in newPRs {
             guard let old = oldByID[new.id] else { continue }
@@ -101,8 +106,13 @@ final class NotificationService {
         )
     }
 
-    func fire(title: String, body: String) {
-        if let handler = notificationHandler {
+    static func prsByID(_ prs: [PRState]) -> [String: PRState] {
+        Dictionary(prs.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
+    }
+
+    private func fire(title: String, body: String) {
+        let handler = stateQueue.sync { storedNotificationHandler }
+        if let handler {
             handler(title, body)
             return
         }
