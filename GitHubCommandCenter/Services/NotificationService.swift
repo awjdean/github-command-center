@@ -128,8 +128,15 @@ final class NotificationService {
     }
 
     private func fire(title: String, body: String) {
-        let handler = stateQueue.sync { storedNotificationHandler }
-        if let handler {
+        let state = stateQueue.sync {
+            (
+                handler: storedNotificationHandler,
+                scheduler: storedNotificationScheduler,
+                errorHandler: storedNotificationDeliveryErrorHandler
+            )
+        }
+
+        if let handler = state.handler {
             handler(title, body)
             return
         }
@@ -144,10 +151,8 @@ final class NotificationService {
             content: content,
             trigger: nil
         )
-        let scheduler = stateQueue.sync { storedNotificationScheduler }
-        let errorHandler = stateQueue.sync { storedNotificationDeliveryErrorHandler }
         let submitRequest =
-            scheduler
+            state.scheduler
             ?? { request, completion in
                 UNUserNotificationCenter.current().add(request, withCompletionHandler: completion)
             }
@@ -158,7 +163,7 @@ final class NotificationService {
             Self.logger.error(
                 "Failed to deliver notification: \(errorDescription, privacy: .public)"
             )
-            errorHandler?(error)
+            state.errorHandler?(error)
         }
     }
 }
