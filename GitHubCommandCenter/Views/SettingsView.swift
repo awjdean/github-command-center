@@ -10,6 +10,7 @@ struct SettingsContentView: View {
     @EnvironmentObject var appState: AppState
     @State private var tokenInput = ""
     @State private var tokenState: TokenState = .empty
+    @State private var tokenSaveErrorMessage: String?
     @State private var tokenAccessDetails: TokenAccessDetails?
     @State private var tokenAccessErrorMessage: String?
     @State private var tokenAccessTask: Task<Void, Never>?
@@ -23,11 +24,16 @@ struct SettingsContentView: View {
         self.showsAppControls = showsAppControls
     }
 
-    enum TokenState {
+    enum TokenState: Equatable {
         case empty
         case unvalidated
         case valid(username: String)
         case invalid
+    }
+
+    struct TokenSaveFailureOutcome: Equatable {
+        let tokenState: TokenState
+        let message: String?
     }
 
     var body: some View {
@@ -124,6 +130,7 @@ struct SettingsContentView: View {
                 )
                 .onChange(of: tokenInput) {
                     clearTokenAccessState()
+                    clearTokenSaveValidationState()
                     withAnimation(.easeInOut(duration: 0.2)) {
                         tokenState = tokenInput.isEmpty ? .empty : .unvalidated
                     }
@@ -138,6 +145,19 @@ struct SettingsContentView: View {
                         .font(.system(size: 11))
                         .foregroundColor(.statusRed)
                 }
+                .transition(.opacity)
+            }
+
+            if let tokenSaveErrorMessage {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.statusRed)
+                    Text(tokenSaveErrorMessage)
+                        .font(.system(size: 11))
+                        .foregroundColor(.statusRed)
+                }
+                .fixedSize(horizontal: false, vertical: true)
                 .transition(.opacity)
             }
 
@@ -198,7 +218,7 @@ struct SettingsContentView: View {
                 scopes: [
                     .init(name: "Pull requests: Read"),
                     .init(name: "Commit statuses: Read"),
-                    .init(name: "Actions: Read", isOptional: true),
+                    .init(name: "Checks: Read"),
                 ]
             )
 
@@ -455,6 +475,7 @@ struct SettingsContentView: View {
 
         Task { @MainActor in
             do {
+                clearTokenSaveValidationState()
                 let client = GitHubRESTClient(token: tokenInput)
                 let username = try await client.validateTokenForAppAccess()
                 try KeychainService.shared.saveToken(tokenInput)
@@ -464,9 +485,11 @@ struct SettingsContentView: View {
                 refreshTokenAccessDetails(using: tokenInput)
                 appState.resetPolling()
             } catch {
+                let outcome = Self.tokenSaveFailureOutcome(for: error)
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    tokenState = .invalid
+                    tokenState = outcome.tokenState
                 }
+                tokenSaveErrorMessage = outcome.message
             }
             isValidating = false
         }
@@ -480,10 +503,15 @@ struct SettingsContentView: View {
             print("Failed to delete token from keychain in clearToken: \(error.localizedDescription)")
         }
         tokenInput = ""
+        clearTokenSaveValidationState()
         withAnimation(.easeInOut(duration: 0.2)) {
             tokenState = .empty
         }
         appState.stopPollingForMissingToken()
+    }
+
+    private func clearTokenSaveValidationState() {
+        tokenSaveErrorMessage = nil
     }
 
     private func clearTokenAccessState() {
@@ -529,6 +557,25 @@ struct SettingsContentView: View {
                 tokenAccessErrorMessage = "Unable to load token access details right now."
             }
         }
+    }
+
+    static func tokenSaveFailureOutcome(for error: Error) -> TokenSaveFailureOutcome {
+        if let appError = error as? AppError {
+            switch appError {
+            case .authError:
+                return TokenSaveFailureOutcome(tokenState: .invalid, message: nil)
+            default:
+                return TokenSaveFailureOutcome(
+                    tokenState: .unvalidated,
+                    message: appError.errorDescription ?? "Unable to save token right now."
+                )
+            }
+        }
+
+        return TokenSaveFailureOutcome(
+            tokenState: .unvalidated,
+            message: (error as NSError).localizedDescription
+        )
     }
 }
 
