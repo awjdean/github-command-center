@@ -4,7 +4,7 @@ enum PanelMode {
     case pullRequests
     case settings
 
-    static let width: CGFloat = 360
+    static let width: CGFloat = 480
 
     var headerTitle: String {
         switch self {
@@ -174,7 +174,7 @@ struct PRListView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxHeight: panelMode == .settings ? 500 : 400)
+        .frame(maxHeight: panelMode == .settings ? 700 : 600)
     }
 
     // MARK: - PR sections

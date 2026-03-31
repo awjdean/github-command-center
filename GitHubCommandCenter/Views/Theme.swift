@@ -15,13 +15,13 @@ extension Color {
 }
 
 extension Font {
-    static let panelTitle = Font.system(size: 13, weight: .semibold)
-    static let panelSubtitle = Font.system(size: 11, weight: .regular)
-    static let sectionLabel = Font.system(size: 10, weight: .semibold)
-    static let prNumber = Font.system(size: 11, weight: .semibold)
-    static let prTitle = Font.system(size: 12, weight: .regular)
-    static let prRepo = Font.system(size: 10, weight: .regular)
-    static let footerText = Font.system(size: 10, weight: .regular)
-    static let tooltipLabel = Font.system(size: 9, weight: .medium)
-    static let tooltipDetail = Font.system(size: 10, weight: .regular)
+    static let panelTitle = Font.system(size: 15, weight: .semibold)
+    static let panelSubtitle = Font.system(size: 13, weight: .regular)
+    static let sectionLabel = Font.system(size: 12, weight: .semibold)
+    static let prNumber = Font.system(size: 13, weight: .semibold)
+    static let prTitle = Font.system(size: 14, weight: .regular)
+    static let prRepo = Font.system(size: 12, weight: .regular)
+    static let footerText = Font.system(size: 12, weight: .regular)
+    static let tooltipLabel = Font.system(size: 11, weight: .medium)
+    static let tooltipDetail = Font.system(size: 12, weight: .regular)
 }
