@@ -28,8 +28,8 @@ enum AppError: LocalizedError, Sendable, Equatable {
             return "GitHub pagination exceeded the safe page limit. Try again later."
         case .rateLimitExceeded(let date):
             AppError.relativeDateFormatterLock.lock()
+            defer { AppError.relativeDateFormatterLock.unlock() }
             let nextUpdate = AppError.relativeDateFormatter.localizedString(for: date, relativeTo: Date())
-            AppError.relativeDateFormatterLock.unlock()
             return
                 "Rate limited — next update \(nextUpdate)"
         case .networkError:
