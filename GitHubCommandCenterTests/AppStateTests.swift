@@ -137,6 +137,45 @@ struct AppStateTests {
     }
 
     @Test
+    func menuBarBadgeCount_countsOnlyNeedsActionPRs() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.prs = [
+            .fixture(number: 1, reviewRequestedFromMe: true),  // needs action
+            .fixture(number: 2),  // waiting on others (default: not mine, no review requested)
+        ]
+
+        #expect(appState.menuBarBadgeCount == 1)
+    }
+
+    @Test
+    func menuBarBadgeCount_zeroPRs_returnsZero() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+
+        #expect(appState.menuBarBadgeCount == 0)
+    }
+
+    @Test
+    func menuBarBadgeCount_allNeedAction_returnsTotal() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.prs = [
+            .fixture(number: 1, reviewRequestedFromMe: true),
+            .fixture(number: 2, reviewRequestedFromMe: true),
+            .fixture(number: 3, reviewRequestedFromMe: true),
+        ]
+
+        #expect(appState.menuBarBadgeCount == 3)
+    }
+
+    @Test
     func emptyStateMessage_authenticatedExplainsTrackedScopeAndRepoAccess() {
         let appState = AppState(
             makePollingEngine: { _ in StubPollingEngine() },

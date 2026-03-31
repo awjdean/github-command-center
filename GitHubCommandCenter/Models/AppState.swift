@@ -61,6 +61,10 @@ final class AppState: ObservableObject {
         cachedWaitingOnOthersPRs
     }
 
+    var menuBarBadgeCount: Int {
+        needsActionPRs.count
+    }
+
     var healthStatus: HealthStatus {
         guard !prs.isEmpty else { return .green }
         let needsAction = needsActionPRs
