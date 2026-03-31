@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+// swiftlint:disable file_length type_body_length
 
 @testable import GitHubCommandCenter
 
@@ -8,6 +9,7 @@ struct GitHubRESTClientTests {
     @Test
     func validateToken_success_returnsUsername() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(urlContains: "/user", json: ["login": "octocat"])
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
@@ -19,6 +21,7 @@ struct GitHubRESTClientTests {
     @Test
     func validateToken_401_throwsAuthError() async {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(urlContains: "/user", statusCode: 401)
         let client = GitHubRESTClient(token: "bad-token", session: harness.session)
 
@@ -35,6 +38,7 @@ struct GitHubRESTClientTests {
     @Test
     func validateToken_403_throwsAuthError() async {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(urlContains: "/user", statusCode: 403)
         let client = GitHubRESTClient(token: "forbidden-token", session: harness.session)
 
@@ -51,6 +55,7 @@ struct GitHubRESTClientTests {
     @Test
     func validateToken_403RateLimit_throwsRateLimitExceeded() async {
         let harness = Harness()
+        defer { harness.teardown() }
         let resetTS = Int(Date().timeIntervalSince1970) + 120
         MockURLProtocol.stub(
             urlContains: "/user",
@@ -77,6 +82,7 @@ struct GitHubRESTClientTests {
     @Test
     func validateToken_429_throwsRateLimitExceeded() async {
         let harness = Harness()
+        defer { harness.teardown() }
         let resetTS = Int(Date().timeIntervalSince1970) + 3600
         MockURLProtocol.stub(
             urlContains: "/user",
@@ -99,6 +105,7 @@ struct GitHubRESTClientTests {
     @Test
     func validateToken_500_throwsServerError() async {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(urlContains: "/user", statusCode: 500)
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
 
@@ -115,6 +122,7 @@ struct GitHubRESTClientTests {
     @Test
     func validateToken_304WithoutCachedResponse_retriesWithoutETag() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(urlContains: "/user", statusCode: 304)
         MockURLProtocol.stub(urlContains: "/user", json: ["login": "octocat"])
 
@@ -128,6 +136,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_duplicateFailingCheckAcrossApis_deduplicatesDisplayedChecksAndTotals() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(
             checkRuns: [
                 [
@@ -162,6 +171,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_emptySearch_returnsEmptyArray() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(
             urlContains: "/search/issues",
             json: [
@@ -180,6 +190,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_singlePR_buildsCorrectState() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow()
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
@@ -198,6 +209,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_sameNumberDifferentRepos_haveDistinctIDs() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(
             urlContains: "/search/issues",
             json: [
@@ -228,7 +240,7 @@ struct GitHubRESTClientTests {
             MockURLProtocol.stub(urlContains: "/repos/org/\(repo)/pulls/42/reviews", json: [])
             MockURLProtocol.stub(
                 urlContains: "/repos/org/\(repo)/commits/abc123def456/check-runs",
-                json: ["check_runs": []]
+                json: ["total_count": 0, "check_runs": []]
             )
             MockURLProtocol.stub(
                 urlContains: "/repos/org/\(repo)/commits/abc123def456/status",
@@ -260,6 +272,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_unknownMergeableState_mapsToPending() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(number: 1, mergeableState: "future_unknown_value")
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
@@ -271,6 +284,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_dirtyMergeableState_mapsToConflicts() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(number: 1, mergeableState: "dirty")
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
@@ -282,6 +296,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_blockedMergeableState_mapsToBlocked() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(number: 1, mergeableState: "blocked")
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
@@ -293,6 +308,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_unstableMergeableState_mapsToReady() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(number: 1, mergeableState: "unstable")
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
@@ -304,6 +320,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_failingCheckRuns_mapsToCIFailing() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(
             number: 1,
             mergeableState: "clean",
@@ -328,6 +345,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_checkRuns403_fallsBackToCommitStatuses() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(
             number: 1,
             checkRunsStatusCode: 403,
@@ -352,25 +370,22 @@ struct GitHubRESTClientTests {
     }
 
     @Test
-    func fetchAllPRStates_checkRuns401_stillThrowsAuthError() async {
+    func fetchAllPRStates_checkRuns401_returnsPRWithNoCIStatus() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(number: 1, checkRunsStatusCode: 401)
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
+        let prs = try await client.fetchAllPRStates(username: "octocat")
 
-        do {
-            _ = try await client.fetchAllPRStates(username: "octocat")
-            Issue.record("Expected authError")
-        } catch let error as AppError {
-            #expect(error == .authError)
-        } catch {
-            Issue.record("Unexpected error: \(error)")
-        }
+        let pr = try #require(prs.first)
+        #expect(pr.ciStatus == .none)
     }
 
     @Test
     func fetchAllPRStates_failedCheckWinsOverPendingCheck() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(
             number: 1,
             checkRuns: [
@@ -394,6 +409,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_pendingCheckRuns_mapsToCIPending() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(
             number: 1,
             checkRuns: [["name": "build", "status": "in_progress"]]
@@ -408,6 +424,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_noCheckRuns_mapsToCINone() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(number: 1, checkRuns: [])
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
@@ -419,6 +436,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_commitStatusFailureWithoutCheckRuns_mapsToCIFailing() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(
             number: 1,
             checkRuns: [],
@@ -445,6 +463,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_reviewsApproved_mapsToApproved() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(
             number: 1,
             reviews: [["user": ["login": "alice"], "state": "APPROVED"]]
@@ -463,6 +482,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_reviewChangesRequested_mapsToChangesRequested() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(
             number: 1,
             reviews: [["user": ["login": "bob"], "state": "CHANGES_REQUESTED"]]
@@ -481,6 +501,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_requestedReviewers_mapsToRequested() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(
             number: 1,
             requestedReviewers: [["login": "carol"]],
@@ -500,6 +521,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_requestedReviewers_overridePriorApproval() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(
             number: 1,
             requestedReviewers: [["login": "carol"]],
@@ -519,6 +541,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_changesRequested_overrideRequestedReviewers() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(
             number: 1,
             requestedReviewers: [["login": "carol"]],
@@ -538,6 +561,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_paginatedReviews_useLatestPage() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(
             urlContains: "/search/issues",
             json: [
@@ -584,7 +608,10 @@ struct GitHubRESTClientTests {
                 count: 30
             )
         )
-        MockURLProtocol.stub(urlContains: "/commits/abc123def456/check-runs", json: ["check_runs": []])
+        MockURLProtocol.stub(
+            urlContains: "/commits/abc123def456/check-runs",
+            json: ["total_count": 0, "check_runs": []]
+        )
         MockURLProtocol.stub(
             urlContains: "/commits/abc123def456/status",
             json: [
@@ -617,6 +644,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_dismissedReview_clearsPriorApproval() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(
             number: 1,
             reviews: [
@@ -635,6 +663,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_parsesUpdatedAtWithoutFractionalSeconds() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(number: 1, updatedAt: "2026-03-30T10:00:00Z")
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
@@ -648,6 +677,7 @@ struct GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_etag304_returnsCachedData() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(
             urlContains: "/user",
             headers: ["ETag": "\"abc\""],
@@ -663,4 +693,54 @@ struct GitHubRESTClientTests {
         let username = try await client.validateToken()
         #expect(username == "octocat")
     }
+
+    @Test
+    func validateToken_cacheEvictionRetainsMostRecentlyUsedEntry() async throws {
+        let harness = Harness()
+        defer { harness.teardown() }
+        let expectedWarning =
+            "Token saved, but full PR status access could not be verified yet. "
+            + "The warning will clear after a successful poll loads PR status data."
+        MockURLProtocol.stub(
+            urlContains: "/user/repos?affiliation=owner,collaborator,organization_member&per_page=100&page=1",
+            headers: ["ETag": "\"repos-v1\""],
+            json: []
+        )
+        MockURLProtocol.stub(
+            urlContains: "/user",
+            headers: ["ETag": "\"user-v1\""],
+            json: ["login": "octocat"]
+        )
+        MockURLProtocol.stub(
+            urlContains: "/user",
+            headers: ["ETag": "\"user-v1\""],
+            json: ["login": "octocat"]
+        )
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session, maxCacheEntries: 2)
+        _ = try await client.validateToken()
+        _ = try await client.fetchTokenAccessDetails()
+
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(urlContains: "/user", statusCode: 304)
+        MockURLProtocol.stub(
+            urlContains: "/search/issues",
+            headers: ["ETag": "\"search-v1\""],
+            json: [
+                "total_count": 0,
+                "incomplete_results": false,
+                "items": [],
+            ]
+        )
+
+        let validation = try await client.validateTokenForAppAccess()
+        #expect(validation == .warning(username: "octocat", message: expectedWarning))
+
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(urlContains: "/user", statusCode: 304)
+
+        let username = try await client.validateToken()
+        #expect(username == "octocat")
+    }
 }
+// swiftlint:enable file_length type_body_length

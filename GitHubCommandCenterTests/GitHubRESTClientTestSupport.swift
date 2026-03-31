@@ -10,7 +10,7 @@ final class Harness {
         session = MockURLProtocol.makeSession()
     }
 
-    deinit {
+    func teardown() {
         MockURLProtocol.reset()
     }
 }
@@ -54,7 +54,10 @@ extension GitHubRESTClientTests {
         MockURLProtocol.stub(urlContains: "/pulls/\(number)/reviews?per_page=100&page=2", json: [])
         MockURLProtocol.stub(urlContains: "/pulls/\(number)/reviews", json: reviews)
         if checkRunsStatusCode == 200 {
-            MockURLProtocol.stub(urlContains: "/check-runs", json: ["check_runs": checkRuns])
+            MockURLProtocol.stub(
+                urlContains: "/check-runs",
+                json: ["total_count": checkRuns.count, "check_runs": checkRuns]
+            )
         } else {
             MockURLProtocol.stub(urlContains: "/check-runs", statusCode: checkRunsStatusCode)
         }

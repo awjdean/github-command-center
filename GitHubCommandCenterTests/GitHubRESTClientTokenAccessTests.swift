@@ -6,6 +6,7 @@ extension GitHubRESTClientTests {
     @Test
     func fetchTokenAccessDetails_classicTokenParsesReportedScopes() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(
             urlContains: "/user",
             headers: ["X-OAuth-Scopes": "repo, workflow"],
@@ -26,6 +27,7 @@ extension GitHubRESTClientTests {
     @Test
     func fetchTokenAccessDetails_withoutReportedScopesReturnsEmptyScopeList() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(
             urlContains: "/user",
             json: ["login": "octocat"]
@@ -44,6 +46,7 @@ extension GitHubRESTClientTests {
     @Test
     func fetchTokenAccessDetails_accessibleRepositoriesPaginatesAndMapsAccessLevels() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(
             urlContains: "/user",
             json: ["login": "octocat"]
@@ -105,6 +108,7 @@ extension GitHubRESTClientTests {
     @Test
     func fetchTokenAccessDetails_accessibleRepositoriesStopsAtConfiguredLimit() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(
             urlContains: "/user",
             json: ["login": "octocat"]
@@ -128,6 +132,10 @@ extension GitHubRESTClientTests {
                 json: repositories
             )
         }
+        MockURLProtocol.stub(
+            urlContains: "/user/repos?affiliation=owner,collaborator,organization_member&per_page=100&page=11",
+            json: []
+        )
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
         let details = try await client.fetchTokenAccessDetails()

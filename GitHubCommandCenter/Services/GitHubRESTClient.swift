@@ -1,4 +1,5 @@
 import Foundation
+// swiftlint:disable file_length type_body_length
 
 actor GitHubRESTClient: GitHubDataSource {
     private static let searchResultsMaxPageLimit = 100
@@ -20,22 +21,73 @@ actor GitHubRESTClient: GitHubDataSource {
         case statusCode(Int)
     }
 
+    private struct CachedResponseEntry {
+        let data: Data
+        let etag: String
+    }
+
+    private struct LRUCache<Key: Hashable, Value> {
+        private var values: [Key: Value] = [:]
+        private var usageOrder: [Key] = []
+
+        var count: Int {
+            values.count
+        }
+
+        subscript(key: Key) -> Value? {
+            mutating get {
+                guard let value = values[key] else { return nil }
+                touch(key)
+                return value
+            }
+            set {
+                switch newValue {
+                case .some(let value):
+                    values[key] = value
+                    touch(key)
+                case .none:
+                    _ = removeValue(forKey: key)
+                }
+            }
+        }
+
+        @discardableResult
+        mutating func removeValue(forKey key: Key) -> Value? {
+            usageOrder.removeAll { $0 == key }
+            return values.removeValue(forKey: key)
+        }
+
+        mutating func trim(to maxEntries: Int) {
+            guard maxEntries >= 0 else { return }
+            while values.count > maxEntries, let oldestKey = usageOrder.first {
+                _ = removeValue(forKey: oldestKey)
+            }
+        }
+
+        private mutating func touch(_ key: Key) {
+            usageOrder.removeAll { $0 == key }
+            usageOrder.append(key)
+        }
+    }
+
     private static let maxCacheEntries = 500
 
     private let token: String
     private let session: URLSession
     private let mergeabilityRetryDelayNanoseconds: UInt64
-    private var etags: [URL: String] = [:]
-    private var cachedResponses: [URL: Data] = [:]
+    private let maxCacheEntries: Int
+    private var responseCache = LRUCache<URL, CachedResponseEntry>()
 
     init(
         token: String,
         session: URLSession = .shared,
-        mergeabilityRetryDelayNanoseconds: UInt64 = 2_500_000_000
+        mergeabilityRetryDelayNanoseconds: UInt64 = 2_500_000_000,
+        maxCacheEntries: Int = 500
     ) {
         self.token = token
         self.session = session
         self.mergeabilityRetryDelayNanoseconds = mergeabilityRetryDelayNanoseconds
+        self.maxCacheEntries = maxCacheEntries
     }
 
     // MARK: - GitHubDataSource
@@ -86,16 +138,29 @@ actor GitHubRESTClient: GitHubDataSource {
 
     func fetchAllPRStates(username: String) async throws -> [PRState] {
         let searchItems = try await searchOpenPRs(username: username)
-        return try await withThrowingTaskGroup(of: PRState?.self) { group in
-            for item in searchItems {
+        let maxConcurrency = 8
+        return await withTaskGroup(of: PRState?.self) { group in
+            var results: [PRState] = []
+            var index = 0
+
+            func addNextTask() {
+                guard index < searchItems.count else { return }
+                let item = searchItems[index]
+                index += 1
                 group.addTask { [self] in
-                    try await buildPRState(from: item, username: username)
+                    try? await buildPRState(from: item, username: username)
                 }
             }
-            var results: [PRState] = []
-            for try await state in group {
-                if let state { results.append(state) }
+
+            for _ in 0..<min(maxConcurrency, searchItems.count) {
+                addNextTask()
             }
+
+            for await state in group {
+                if let state { results.append(state) }
+                addNextTask()
+            }
+
             return results
         }
     }
@@ -257,17 +322,35 @@ actor GitHubRESTClient: GitHubDataSource {
     }
 
     private func fetchCheckRuns(owner: String, repo: String, sha: String) async throws -> [CheckRun] {
-        let data: Data
-        do {
-            data = try await requestData("/repos/\(owner)/\(repo)/commits/\(sha)/check-runs?per_page=100")
-        } catch RequestError.statusCode(let statusCode) where statusCode == 403 || statusCode == 404 {
-            return []
-        } catch {
-            throw mapRequestError(error)
+        let perPage = 100
+        var page = 1
+        var allCheckRuns: [CheckRun] = []
+
+        while page <= Self.reviewMaxPageLimit {
+            let data: Data
+            do {
+                data = try await requestData(
+                    "/repos/\(owner)/\(repo)/commits/\(sha)/check-runs?per_page=\(perPage)&page=\(page)"
+                )
+            } catch RequestError.statusCode(let statusCode)
+                where statusCode == 401 || statusCode == 403 || statusCode == 404
+            {
+                return allCheckRuns
+            } catch {
+                throw mapRequestError(error)
+            }
+
+            let response = try decode(CheckRunsResponse.self, from: data)
+            allCheckRuns.append(contentsOf: response.checkRuns)
+
+            if allCheckRuns.count >= response.totalCount || response.checkRuns.count < perPage {
+                return allCheckRuns
+            }
+
+            page += 1
         }
 
-        let response = try decode(CheckRunsResponse.self, from: data)
-        return response.checkRuns
+        return allCheckRuns
     }
 
     private func fetchCommitStatuses(owner: String, repo: String, sha: String) async throws -> CombinedStatusResponse {
@@ -558,8 +641,8 @@ actor GitHubRESTClient: GitHubDataSource {
         var request = try buildRequest(path)
         guard let url = request.url else { throw RequestError.app(.networkError) }
 
-        if let etag = etags[url] {
-            request.setValue(etag, forHTTPHeaderField: "If-None-Match")
+        if let cachedEntry = responseCache[url] {
+            request.setValue(cachedEntry.etag, forHTTPHeaderField: "If-None-Match")
         }
 
         let (data, http) = try await performRequest(request)
@@ -567,32 +650,30 @@ actor GitHubRESTClient: GitHubDataSource {
 
         switch http.statusCode {
         case 304:
-            if let cached = cachedResponses[url] { return cached }
+            if let cachedEntry = responseCache[url] { return cachedEntry.data }
             guard allowRetryWithoutETag else { throw RequestError.app(.networkError) }
 
-            let previousETag = etags.removeValue(forKey: url)
+            let previousEntry = responseCache.removeValue(forKey: url)
             do {
                 return try await requestData(path, allowRetryWithoutETag: false)
             } catch {
-                if let previousETag, etags[url] == nil {
-                    etags[url] = previousETag
+                if let previousEntry, responseCache[url] == nil {
+                    responseCache[url] = previousEntry
                 }
                 throw error
             }
         default:
             if let etag = http.value(forHTTPHeaderField: "ETag") {
+                responseCache[url] = CachedResponseEntry(data: data, etag: etag)
                 evictCacheIfNeeded()
-                etags[url] = etag
-                cachedResponses[url] = data
             }
             return data
         }
     }
 
     private func evictCacheIfNeeded() {
-        guard cachedResponses.count > Self.maxCacheEntries else { return }
-        cachedResponses.removeAll(keepingCapacity: true)
-        etags.removeAll(keepingCapacity: true)
+        guard responseCache.count > maxCacheEntries else { return }
+        responseCache.trim(to: maxCacheEntries)
     }
 
     private func requestResponse(_ path: String) async throws -> HTTPDataResponse {
@@ -689,3 +770,4 @@ actor GitHubRESTClient: GitHubDataSource {
         try Self.jsonDecoder.decode(type, from: data)
     }
 }
+// swiftlint:enable file_length type_body_length

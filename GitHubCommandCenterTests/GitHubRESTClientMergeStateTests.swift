@@ -7,6 +7,7 @@ extension GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_behindMergeableState_mapsToBehind() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(number: 1, mergeableState: "behind")
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
@@ -18,6 +19,7 @@ extension GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_hasHooksMergeableState_mapsToBlocked() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         stubFullPRFlow(number: 1, mergeableState: "has_hooks")
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
@@ -29,6 +31,7 @@ extension GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_nilMergeableState_retriesUsingInjectedDelay() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(
             urlContains: "/search/issues",
             json: [
@@ -48,7 +51,10 @@ extension GitHubRESTClientTests {
         )
         MockURLProtocol.stub(urlContains: "/pulls/1/reviews?per_page=100&page=1", json: [])
         MockURLProtocol.stub(urlContains: "/pulls/1/reviews?per_page=100&page=2", json: [])
-        MockURLProtocol.stub(urlContains: "/commits/abc123def456/check-runs", json: ["check_runs": []])
+        MockURLProtocol.stub(
+            urlContains: "/commits/abc123def456/check-runs",
+            json: ["total_count": 0, "check_runs": []]
+        )
         MockURLProtocol.stub(
             urlContains: "/commits/abc123def456/status",
             json: [

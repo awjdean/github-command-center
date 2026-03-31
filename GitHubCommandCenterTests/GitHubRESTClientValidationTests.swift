@@ -6,6 +6,7 @@ extension GitHubRESTClientTests {
     @Test
     func validateTokenForAppAccess_success_returnsUsernameWhenSearchEmpty() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         let expectedMessage =
             "Token saved, but full PR status access could not be verified yet. "
             + "The warning will clear after a successful poll loads PR status data."
@@ -35,6 +36,7 @@ extension GitHubRESTClientTests {
     @Test
     func validateTokenForAppAccess_search403_throwsAuthError() async {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(urlContains: "/user", json: ["login": "octocat"])
         MockURLProtocol.stub(urlContains: "/search/issues", statusCode: 403)
 
@@ -53,6 +55,7 @@ extension GitHubRESTClientTests {
     @Test
     func validateTokenForAppAccess_incompleteSearchResults_throwsIncompleteSearchResults() async {
         let harness = Harness()
+        defer { harness.teardown() }
         let expectedMessage =
             "GitHub search results are temporarily incomplete. "
             + "The token was saved, but full PR status access could not be verified yet."
@@ -79,6 +82,7 @@ extension GitHubRESTClientTests {
     @Test
     func validateTokenForAppAccess_nonEmptySearch_commitStatus403_throwsAuthError() async {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(urlContains: "/user", json: ["login": "octocat"])
         stubFullPRFlow(checkRunsStatusCode: 403, statusCodeForCommitStatuses: 403)
 
@@ -97,6 +101,7 @@ extension GitHubRESTClientTests {
     @Test
     func validateTokenForAppAccess_nonEmptySearch_checkRuns403_stillVerifiesWhenCommitStatusesReadable() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(urlContains: "/user", json: ["login": "octocat"])
         stubFullPRFlow(
             checkRunsStatusCode: 403,

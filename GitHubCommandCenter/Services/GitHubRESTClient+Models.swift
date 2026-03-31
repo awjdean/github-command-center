@@ -70,6 +70,7 @@ extension GitHubRESTClient {
     }
 
     struct CheckRunsResponse: Codable, Sendable {
+        let totalCount: Int
         let checkRuns: [CheckRun]
     }
 

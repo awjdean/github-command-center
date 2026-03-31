@@ -6,6 +6,7 @@ extension GitHubRESTClientTests {
     @Test
     func validateToken_persistentStub_supportsRepeatedIdenticalRequests() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(
             urlContains: "/user",
             persistent: true,
@@ -24,6 +25,7 @@ extension GitHubRESTClientTests {
     @Test
     func validateTokenForAppAccess_largeSearchResultOnlyRequestsFirstPage() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(
             urlContains: "/user",
             persistent: true,
@@ -80,6 +82,7 @@ extension GitHubRESTClientTests {
     @Test
     func fetchAllPRStates_aggregatesReviewsAcrossPages() async throws {
         let harness = Harness()
+        defer { harness.teardown() }
         MockURLProtocol.stub(
             urlContains: "/search/issues",
             json: [
@@ -109,7 +112,10 @@ extension GitHubRESTClientTests {
                 )
             )
         }
-        MockURLProtocol.stub(urlContains: "/commits/abc123def456/check-runs", json: ["check_runs": []])
+        MockURLProtocol.stub(
+            urlContains: "/commits/abc123def456/check-runs",
+            json: ["total_count": 0, "check_runs": []]
+        )
         MockURLProtocol.stub(
             urlContains: "/commits/abc123def456/status",
             json: [
