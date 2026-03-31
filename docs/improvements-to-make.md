@@ -1,8 +1,6 @@
 # UX Improvements
 
 - [X] Move the "Quit" and the "Launch at login" options into Settings.
-
-
 - [X] User can't edit GitHub token after it has been entered + verified. then must remove it.
 - [X] Show the user which repos are being tracked.
 - [X] Make the "Accessible repos" section in Settings be collapsible. It's default state should be collapsed.
