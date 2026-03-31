@@ -5,72 +5,72 @@ struct PRRowView: View {
     @State private var isHovered = false
 
     var body: some View {
-        Button {
-            let opened = NSWorkspace.shared.open(pr.url)
-            if !opened {
-                print("Failed to open PR URL for \(pr.id): \(pr.url.absoluteString)")
-            }
-        } label: {
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Button {
+                        let opened = NSWorkspace.shared.open(pr.url)
+                        if !opened {
+                            print("Failed to open PR URL for \(pr.id): \(pr.url.absoluteString)")
+                        }
+                    } label: {
                         Text("#\(pr.number)")
                             .font(.prNumber)
                             .foregroundColor(.linkBlue)
                             .underline()
+                    }
+                    .buttonStyle(.plain)
 
-                        if !pr.displayRole.isEmpty {
-                            Text(pr.displayRole)
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundColor(.textMuted)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 1)
-                                .background(Color.panelSurface)
-                                .cornerRadius(3)
-                        }
-
-                        Spacer()
-
-                        if pr.draftStatus == .draft {
-                            Text("DRAFT")
-                                .font(.system(size: 8, weight: .semibold))
-                                .foregroundColor(.textMuted)
-                                .padding(.horizontal, 3)
-                                .padding(.vertical, 1)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 3)
-                                        .stroke(Color.textMuted.opacity(0.5), lineWidth: 0.5)
-                                )
-                        }
+                    if !pr.displayRole.isEmpty {
+                        Text(pr.displayRole)
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(.textMuted)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.panelSurface)
+                            .cornerRadius(3)
                     }
 
-                    Text(pr.title)
-                        .font(.prTitle)
-                        .foregroundColor(.textSecondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    Spacer()
 
-                    HStack(spacing: 6) {
-                        Text(pr.repoFullName)
-                            .font(.prRepo)
+                    if pr.draftStatus == .draft {
+                        Text("DRAFT")
+                            .font(.system(size: 8, weight: .semibold))
                             .foregroundColor(.textMuted)
+                            .padding(.horizontal, 3)
+                            .padding(.vertical, 1)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .stroke(Color.textMuted.opacity(0.5), lineWidth: 0.5)
+                            )
+                    }
+                }
 
-                        Spacer()
+                Text(pr.title)
+                    .font(.prTitle)
+                    .foregroundColor(.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
-                        HStack(spacing: 5) {
-                            StatusDotView(dimension: .ci, pr: pr)
-                            StatusDotView(dimension: .review, pr: pr)
-                            StatusDotView(dimension: .merge, pr: pr)
-                        }
+                HStack(spacing: 6) {
+                    Text(pr.repoFullName)
+                        .font(.prRepo)
+                        .foregroundColor(.textMuted)
+
+                    Spacer()
+
+                    HStack(spacing: 5) {
+                        StatusDotView(dimension: .ci, pr: pr)
+                        StatusDotView(dimension: .review, pr: pr)
+                        StatusDotView(dimension: .merge, pr: pr)
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(isHovered ? Color.panelSurface : Color.clear)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(isHovered ? Color.panelSurface : Color.clear)
+        .contentShape(Rectangle())
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.1)) { isHovered = hovering }
         }
