@@ -14,7 +14,7 @@ jobs:
     env:
       APP_NAME: GitHubCommandCenter.app
       DERIVED_DATA_ROOT: build/DerivedData
-      XCODE_VERSION: "16.4"
+      XCODE_VERSION: "26.4"
     steps:
       - uses: actions/checkout@v4
 
@@ -22,7 +22,7 @@ jobs:
         with:
           install: true
 
-      # Release builds are produced with the Xcode 16.4 toolchain used in CI.
+      # Release builds are produced with the Xcode 26.4 toolchain used in CI.
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1.7.0
         with:
