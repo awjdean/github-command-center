@@ -8,6 +8,10 @@ struct NotificationServiceTests {
         case failed
     }
 
+    private enum MockAuthorizationError: Error {
+        case deniedBySystem
+    }
+
     private final class Harness {
         let service = NotificationService()
         var fired: [(String, String)] = []
@@ -32,6 +36,31 @@ struct NotificationServiceTests {
 
         try #require(harness.fired.count == 1)
         #expect(harness.fired[0].1.contains("unit-tests"))
+    }
+
+    @Test
+    func requestPermission_returnsGrantedAuthorizationResult() async {
+        let service = NotificationService()
+        service.authorizationRequester = { options in
+            #expect(options == [.alert, .sound, .badge])
+            return true
+        }
+
+        let granted = await service.requestPermission()
+
+        #expect(granted)
+    }
+
+    @Test
+    func requestPermission_returnsFalseWhenAuthorizationThrows() async {
+        let service = NotificationService()
+        service.authorizationRequester = { _ in
+            throw MockAuthorizationError.deniedBySystem
+        }
+
+        let granted = await service.requestPermission()
+
+        #expect(granted == false)
     }
 
     @Test

@@ -12,6 +12,7 @@ final class NotificationService {
         (
             (UNNotificationRequest, @escaping (Error?) -> Void) -> Void
         )?
+    private var storedAuthorizationRequester: ((UNAuthorizationOptions) async throws -> Bool)?
     private var storedNotificationDeliveryErrorHandler: ((Error) -> Void)?
 
     // Injected in tests to capture fired notifications without UNUserNotificationCenter.
@@ -30,11 +31,38 @@ final class NotificationService {
         set { stateQueue.sync { storedNotificationDeliveryErrorHandler = newValue } }
     }
 
+    var authorizationRequester: ((UNAuthorizationOptions) async throws -> Bool)? {
+        get { stateQueue.sync { storedAuthorizationRequester } }
+        set { stateQueue.sync { storedAuthorizationRequester = newValue } }
+    }
+
     init() {}
 
-    func requestPermission() async {
-        _ = try? await UNUserNotificationCenter.current()
-            .requestAuthorization(options: [.alert, .sound, .badge])
+    @discardableResult
+    func requestPermission() async -> Bool {
+        do {
+            let requester = stateQueue.sync { storedAuthorizationRequester }
+            let granted: Bool
+            if let requester {
+                granted = try await requester([.alert, .sound, .badge])
+            } else {
+                granted = try await UNUserNotificationCenter.current()
+                    .requestAuthorization(options: [.alert, .sound, .badge])
+            }
+
+            if granted {
+                Self.logger.info("Notification permission granted")
+            } else {
+                Self.logger.info("Notification permission denied")
+            }
+            return granted
+        } catch {
+            let errorDescription = error.localizedDescription
+            Self.logger.error(
+                "Notification permission request failed: \(errorDescription, privacy: .public)"
+            )
+            return false
+        }
     }
 
     // Detects state transitions between two poll cycles and fires notifications.
