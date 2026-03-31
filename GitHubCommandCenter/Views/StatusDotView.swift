@@ -148,6 +148,8 @@ struct StatusDotView: View {
 // MARK: - Tooltip data (extracted for testability)
 
 struct StatusDotTooltip {
+    private static let reviewerDisplayLimit = 2
+
     let dimension: StatusDimension
     let pr: PRState
 
@@ -188,12 +190,11 @@ struct StatusDotTooltip {
         case .review:
             switch pr.reviewStatus {
             case .approved(let by):
-                return "Approved by \(by.map { "@\($0)" }.joined(separator: ", "))"
+                return "Approved by \(formattedReviewers(by, maxCount: Self.reviewerDisplayLimit))"
             case .changesRequested(let by):
-                return "Changes requested by \(by.map { "@\($0)" }.joined(separator: ", "))"
+                return "Changes requested by \(formattedReviewers(by, maxCount: Self.reviewerDisplayLimit))"
             case .requested(let from):
-                let who = from.prefix(2).map { "@\($0)" }.joined(separator: ", ")
-                return "Review requested from \(who)"
+                return "Review requested from \(formattedReviewers(from, maxCount: Self.reviewerDisplayLimit))"
             case .none:
                 return "No reviews"
             }
@@ -211,6 +212,15 @@ struct StatusDotTooltip {
                 return "Checking mergeability…"
             }
         }
+    }
+
+    private func formattedReviewers(_ reviewers: [String], maxCount: Int) -> String {
+        let displayedReviewers = reviewers.prefix(maxCount).map { "@\($0)" }
+        guard reviewers.count > maxCount else {
+            return displayedReviewers.joined(separator: ", ")
+        }
+
+        return "\(displayedReviewers.joined(separator: ", ")) and \(reviewers.count - maxCount) more"
     }
 }
 

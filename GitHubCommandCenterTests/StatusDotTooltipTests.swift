@@ -100,6 +100,15 @@ struct StatusDotTooltipTests {
     }
 
     @Test
+    func review_approved_manyReviewers_detailTruncatesAfterTwoNames() {
+        let tooltip = StatusDotTooltip(
+            dimension: .review,
+            pr: .fixture(reviewStatus: .approved(by: ["alice", "bob", "carol"]))
+        )
+        #expect(tooltip.detail == "Approved by @alice, @bob and 1 more")
+    }
+
+    @Test
     func review_changesRequested_detail() {
         let tooltip = StatusDotTooltip(
             dimension: .review,
@@ -109,12 +118,30 @@ struct StatusDotTooltipTests {
     }
 
     @Test
+    func review_changesRequested_manyReviewers_detailTruncatesAfterTwoNames() {
+        let tooltip = StatusDotTooltip(
+            dimension: .review,
+            pr: .fixture(reviewStatus: .changesRequested(by: ["alice", "bob", "carol"]))
+        )
+        #expect(tooltip.detail == "Changes requested by @alice, @bob and 1 more")
+    }
+
+    @Test
     func review_requested_detail() {
         let tooltip = StatusDotTooltip(
             dimension: .review,
             pr: .fixture(reviewStatus: .requested(by: ["carol"]))
         )
         #expect(tooltip.detail == "Review requested from @carol")
+    }
+
+    @Test
+    func review_requested_manyReviewers_detailTruncatesAfterTwoNames() {
+        let tooltip = StatusDotTooltip(
+            dimension: .review,
+            pr: .fixture(reviewStatus: .requested(by: ["alice", "bob", "carol"]))
+        )
+        #expect(tooltip.detail == "Review requested from @alice, @bob and 1 more")
     }
 
     @Test
