@@ -69,9 +69,7 @@ struct PRListView: View {
                 Text(panelMode.headerTitle)
                     .font(.panelTitle)
                     .foregroundColor(.textPrimary)
-                Text(panelSubtitle)
-                    .font(.panelSubtitle)
-                    .foregroundColor(.textTertiary)
+                panelSubtitleView
             }
             Spacer()
 
@@ -97,6 +95,24 @@ struct PRListView: View {
             appState.panelSubtitleText
         case .settings:
             "Authentication & app settings"
+        }
+    }
+
+    @ViewBuilder
+    private var panelSubtitleView: some View {
+        let actionCount = appState.menuBarBadgeCount
+        if panelMode == .pullRequests && actionCount > 0 {
+            (Text(panelSubtitle)
+                .foregroundColor(.textTertiary)
+                + Text("  ·  ")
+                .foregroundColor(.textMuted)
+                + Text("\(actionCount) need attention")
+                .foregroundColor(.statusYellow))
+                .font(.panelSubtitle)
+        } else {
+            Text(panelSubtitle)
+                .font(.panelSubtitle)
+                .foregroundColor(.textTertiary)
         }
     }
 
