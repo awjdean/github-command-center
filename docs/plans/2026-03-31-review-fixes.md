@@ -6,7 +6,7 @@
 
 **Architecture:** Keep changes local to the affected workflow, services, views, tests, and docs. Add focused regression coverage for behavior changes first, then implement the minimal production changes needed to make those tests pass.
 
-**Tech Stack:** Swift 6, Swift Testing, SwiftUI, GitHub Actions, `mise`
+**Tech Stack:** Swift 5.9, Swift Testing, SwiftUI, GitHub Actions, `mise`
 
 ### Task 1: Verify Findings and Capture Red Tests
 

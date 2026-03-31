@@ -15,15 +15,15 @@
 
 
 
-
 - [ ] Make the dropdown resizable lengthways by clicking and dragging on the bottom edge of the dropdown. The length of the dropdown should persist between dropdown opens and app restarts.
-- [ ] Make is so that you can always see the title of the triage category at the top when you're scrolling. For example, at first as you scroll down the "NEEDS YOUR ACTION" should remain at the top, then when the "WAITING ON OTHERS" gets to the top it should push up the "NEEDS YOUR ACTION" and then "WAITING ON OTHERS" should take its place at the top, then when "YOUR DRAFT PRs" reaches the top it should push "WAITING ON OTHERS" up and then "YOUR DRAFT PRs" should be at the top.
+- [ ] Make it so that you can always see the title of the triage category at the top when you're scrolling. For example, at first as you scroll down the "NEEDS YOUR ACTION" should remain at the top, then when the "WAITING ON OTHERS" gets to the top it should push up the "NEEDS YOUR ACTION" and then "WAITING ON OTHERS" should take its place at the top, then when "YOUR DRAFT PRs" reaches the top it should push "WAITING ON OTHERS" up and then "YOUR DRAFT PRs" should be at the top.
 
 
 
 
 # Bugs
 - [ ] When a PR is in draft the CI indicator always shows "Checking mergeability" whatever is actually happening to the CI. Can we please make it so that the CI indicator info popup says the actual mergeability status.
+- [ ] Consider the following scenario: user A has ownership of a PR, and then requests a review from user B, and then user B submits a "Changes requested" review on a PR, and then user A actions changes and then submits a review.
 - [ ] The plan(docking) PR (in draft) shows "Checks pending" when all the checks have passed.
 - [ ] PRs that are in draft, that you didn't create and are not assigned to should not appear in the app.
 - [ ] Failing CI checks show repeated info in the info pop up (e.g., meeko PR).
@@ -37,7 +37,7 @@
 
 
 # Efficiency
-- [ ] Don't poll draft PRs.
+- [ ] Don't poll draft PRs ?
 
 
 # Dev

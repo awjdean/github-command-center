@@ -89,7 +89,7 @@ Notable thresholds:
 
 Opt-in policy rules include `force_unwrapping`, `implicitly_unwrapped_optional`, `empty_count`, `first_where`, `toggle_bool`, and `modifier_order`.
 
-Allowed short identifiers: `id`, `x`, `y`, `i`, `j`, `k`.
+No global identifier exclusions are configured. For legitimate short names like `id`, use scoped `// swiftlint:disable:next identifier_name` inline disables.
 
 Manual commands:
 
