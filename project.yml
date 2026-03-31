@@ -1,7 +1,7 @@
 name: GitHubCommandCenter
 options:
   bundleIdPrefix: com.awjdean
-  xcodeVersion: "26.4"
+  xcodeVersion: "26.3"
   createIntermediateGroups: true
 
 targets:

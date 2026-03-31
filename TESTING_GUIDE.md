@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - **macOS 14.0+**
-- **Xcode 26.4** (includes `swift format`)
+- **Xcode 26.3** (includes `swift format`)
 - **[mise](https://mise.jdx.dev/)** for tool and task management
 - A **GitHub account** with at least one open pull request you're involved in
 
