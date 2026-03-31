@@ -2,10 +2,6 @@
 
 PRs are sorted into three sections in the panel, from top to bottom: **Needs Your Action**, **Waiting on Others**, and **Your Draft PRs**.
 
-## Your Draft PRs
-
-Any PR with `draftStatus == .draft` where you created it or are assigned to it. Draft PRs from others that you didn't create and aren't assigned to fall through to Waiting on Others instead.
-
 ## Needs Your Action
 
 A non-draft PR lands here if **any** of the following are true:
@@ -25,6 +21,10 @@ Everything else. This covers:
 - PRs you created that are in a healthy state (CI passing, no conflicts, reviews pending or not yet requested)
 - Draft PRs from other people that you're not assigned to
 - Any PR where you have no ownership role and haven't been asked to act
+
+## Your Draft PRs
+
+Any PR with `draftStatus == .draft` where you created it or are assigned to it. Draft PRs from others that you didn't create and aren't assigned to fall through to Waiting on Others instead.
 
 ## Sort order
 
