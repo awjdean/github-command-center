@@ -1,5 +1,21 @@
 import SwiftUI
 
+let logSubsystem = Bundle.main.bundleIdentifier ?? "GitHubCommandCenter"
+
+enum Spacing {
+    static let hairline: CGFloat = 1
+    static let micro: CGFloat = 2
+    static let xxxs: CGFloat = 3
+    static let xxs: CGFloat = 4
+    static let xs: CGFloat = 6
+    static let sm: CGFloat = 8
+    static let md: CGFloat = 10
+    static let lg: CGFloat = 12
+    static let xl: CGFloat = 16
+    static let xxl: CGFloat = 24
+    static let xxxl: CGFloat = 40
+}
+
 extension Color {
     static let panelBackground = Color(red: 0.176, green: 0.176, blue: 0.239)  // #2D2D3D
     static let panelSurface = Color(red: 0.227, green: 0.227, blue: 0.290)  // #3A3A4A
