@@ -24,7 +24,7 @@ jobs:
 
       # Release builds are produced with the Xcode 16 toolchain used in CI.
       - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@v1.6.0
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
@@ -67,7 +67,7 @@ jobs:
             2. Move `GitHubCommandCenter.app` to `/Applications`
             3. First launch: right-click the app → **Open** (bypasses Gatekeeper for unsigned builds)
 
-            **Requirements:** macOS 13 (Ventura) or later
+            **Requirements:** macOS 14 (Sonoma) or later
 
             **Setup:** Click the menu bar icon → enter your GitHub Personal Access Token (needs `repo` read scope)
         env:
