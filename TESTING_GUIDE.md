@@ -157,12 +157,27 @@ mise run open
 2. Generate either:
    - A classic token with the `repo` scope, or
    - A fine-grained token with **Pull requests: Read**, **Commit statuses: Read**, and **Checks: Read**
-3. Copy the token
+3. If you use a fine-grained token, grant repository access to every repo you want the app to track
+4. Copy the token
 
 ### 2. Launch the app
 
 1. Build with `mise run build` or run the app from Xcode with **Cmd+R**
 2. Look for the menu bar icon at the top of the screen
+
+### Optional: preload the token for local development
+
+1. Add `GITHUB_TOKEN=...` to a local `.env.local` file at the repo root, or set `GITHUB_TOKEN` in your Xcode scheme environment
+2. Launch the app with an empty keychain entry for GitHub Command Center
+3. The app will import that token into Keychain on startup, then continue using Keychain as the source of truth
+4. `.env.local` and `.env` are git-ignored in this repo; use `.env.example` as the template
+
+**Debug vs Release**
+
+- **Debug** builds set `DevEnvSearchRoot` in the app Info.plist to the repository root (`$(SRCROOT)` from XcodeGen). On first launch with an empty keychain, token bootstrap walks that directory (and parents) for `.env.local` / `.env`, so a repo-root file is found even when the app runs from DerivedData and the process working directory is not the repo.
+- **Release** builds leave `DevEnvSearchRoot` empty; bootstrap still checks process environment variables and searches from the current working directory and the folder next to the app bundle, same as before. For distributed builds, configure the token in the app or rely on environment variables where appropriate.
+
+**Security note:** Only the repo *path* is baked into Debug Info.plist. The token itself is never embedded at build time; it is read from your local file at runtime.
 
 ### 3. Configure the token
 
@@ -176,8 +191,9 @@ mise run open
 
 1. Open the menu bar panel
 2. Confirm PR titles, repo names, review state, draft state, and CI indicators match GitHub
-3. Confirm the icon color matches repo health
-4. Click a PR row and verify it opens in the browser
+3. Remember that the app currently tracks pull requests involving the authenticated user
+4. Confirm the icon color matches repo health
+5. Click a PR row and verify it opens in the browser
 
 ## Troubleshooting
 
@@ -189,4 +205,5 @@ mise run open
 | `GitHubCommandCenter.xcodeproj` is stale | Run `mise run sync` after changing `project.yml` |
 | Hooks do not run | Reinstall them with `mise run hooks:install` |
 | Token validation fails | Ensure the token has the required `repo` scope or the fine-grained read permissions listed above |
+| PR list is empty even though your team has open PRs | The app currently shows PRs involving the authenticated user, and fine-grained tokens need repository access to the repos you expect to see |
 | PRs load but CI detail looks incomplete | Add **Checks: Read** to the fine-grained token; without it the app falls back to commit statuses only |
