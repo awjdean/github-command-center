@@ -21,19 +21,6 @@ struct PollingEngineTests {
         }
     }
 
-    private func waitUntil(
-        timeoutNanoseconds: UInt64,
-        pollIntervalNanoseconds: UInt64 = 10_000_000,
-        condition: () -> Bool
-    ) async -> Bool {
-        let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
-        while DispatchTime.now().uptimeNanoseconds < deadline {
-            if condition() { return true }
-            try? await Task.sleep(nanoseconds: pollIntervalNanoseconds)
-        }
-        return condition()
-    }
-
     @Test
     func pollInterval_fewerThan20PRs_is60s() {
         let harness = Harness()
@@ -311,8 +298,18 @@ struct PollingEngineTests {
 
         harness.engine.reset()
         harness.appState.recentlyClosedPRs = [.fixture(number: 100)]
-        let recentlyClosedWasCleared = await waitUntil(timeoutNanoseconds: 300_000_000) {
-            harness.appState.recentlyClosedPRs.isEmpty
+        var recentlyClosedWasCleared = false
+
+        await confirmation("recently closed PRs stay visible after reset") { confirmation in
+            let deadline = DispatchTime.now().uptimeNanoseconds + 300_000_000
+            while DispatchTime.now().uptimeNanoseconds < deadline {
+                if harness.appState.recentlyClosedPRs.isEmpty {
+                    recentlyClosedWasCleared = true
+                    break
+                }
+                try? await Task.sleep(nanoseconds: 10_000_000)
+            }
+            confirmation()
         }
 
         #expect(recentlyClosedWasCleared == false)

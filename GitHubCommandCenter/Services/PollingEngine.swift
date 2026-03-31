@@ -10,9 +10,10 @@ final class PollingEngine: PollingControlling {
 
     private let appState: AppState
     private let recentlyClosedClearDelay: TimeInterval
-    var client: (any GitHubDataSource)?
+    private(set) var client: (any GitHubDataSource)?
     private var pollingTask: Task<Void, Never>?
     private var clearRecentlyClosedTask: Task<Void, Never>?
+    private var clearRecentlyClosedTaskID: UUID?
     private var previousPRs: [PRState] = []
     private var consecutiveFailures = 0
 
@@ -39,6 +40,7 @@ final class PollingEngine: PollingControlling {
     func reset() {
         clearRecentlyClosedTask?.cancel()
         clearRecentlyClosedTask = nil
+        clearRecentlyClosedTaskID = nil
         previousPRs = []
         consecutiveFailures = 0
     }
@@ -46,7 +48,8 @@ final class PollingEngine: PollingControlling {
     func forceRefresh() {
         pollingTask?.cancel()
         pollingTask = Task {
-            await poll()
+            let outcome = await poll()
+            guard outcome != .stopLoop else { return }
             await runLoop()
         }
     }
@@ -69,7 +72,7 @@ final class PollingEngine: PollingControlling {
 
             switch outcome {
             case .useRegularInterval:
-                let interval = await pollInterval
+                let interval = pollInterval
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             case .continueImmediately:
                 continue pollingLoop
@@ -156,7 +159,7 @@ final class PollingEngine: PollingControlling {
             context.panel.isStale = AppState.staleStatus(lastUpdated: context.panel.lastUpdated)
             await appState.applyPollSnapshot(.init(panel: context.panel, auth: context.auth))
 
-            let delay = max(resetAt.timeIntervalSinceNow + 5, 60)
+            let delay = min(max(resetAt.timeIntervalSinceNow + 5, 60), 3600)
             stop()
             pollingTask = Task {
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
@@ -205,6 +208,7 @@ final class PollingEngine: PollingControlling {
 
     private func scheduleRecentlyClosedClearTask() {
         clearRecentlyClosedTask?.cancel()
+        let taskID = UUID()
         clearRecentlyClosedTask = Task { [weak self] in
             guard let self else { return }
 
@@ -213,7 +217,11 @@ final class PollingEngine: PollingControlling {
             guard !Task.isCancelled else { return }
 
             await self.appState.clearRecentlyClosedPRs()
-            self.clearRecentlyClosedTask = nil
+            if self.clearRecentlyClosedTaskID == taskID {
+                self.clearRecentlyClosedTask = nil
+                self.clearRecentlyClosedTaskID = nil
+            }
         }
+        clearRecentlyClosedTaskID = taskID
     }
 }
