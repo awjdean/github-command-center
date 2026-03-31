@@ -94,7 +94,7 @@ struct PRListView: View {
     private var panelSubtitle: String {
         switch panelMode {
         case .pullRequests:
-            "\(appState.prs.count) open PR\(appState.prs.count == 1 ? "" : "s")"
+            appState.panelSubtitleText
         case .settings:
             "Authentication & app settings"
         }
@@ -214,9 +214,16 @@ struct PRListView: View {
             Image(systemName: "checkmark.circle")
                 .font(.system(size: 28))
                 .foregroundColor(.statusGreen)
-            Text("All clear. No open pull requests.")
+            Text("No tracked pull requests right now.")
                 .font(.prTitle)
                 .foregroundColor(.textSecondary)
+            if let emptyStateMessage = appState.emptyStateMessage {
+                Text(emptyStateMessage)
+                    .font(.footerText)
+                    .foregroundColor(.textTertiary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)

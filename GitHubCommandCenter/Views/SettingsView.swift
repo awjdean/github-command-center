@@ -10,7 +10,11 @@ struct SettingsContentView: View {
     @EnvironmentObject var appState: AppState
     @State private var tokenInput = ""
     @State private var tokenState: TokenState = .empty
+    @State private var tokenAccessDetails: TokenAccessDetails?
+    @State private var tokenAccessErrorMessage: String?
+    @State private var tokenAccessTask: Task<Void, Never>?
     @State private var isValidating = false
+    @State private var isLoadingTokenAccess = false
     @State private var launchAtLogin = false
     let showsAppControls: Bool
 
@@ -88,6 +92,8 @@ struct SettingsContentView: View {
                     .stroke(Color.statusGreen.opacity(0.2), lineWidth: 1)
             )
 
+            tokenAccessSection
+
             Button(role: .destructive) {
                 clearToken()
             } label: {
@@ -116,6 +122,7 @@ struct SettingsContentView: View {
                         .stroke(tokenBorderColor, lineWidth: 1)
                 )
                 .onChange(of: tokenInput) {
+                    clearTokenAccessState()
                     withAnimation(.easeInOut(duration: 0.2)) {
                         tokenState = tokenInput.isEmpty ? .empty : .unvalidated
                     }
@@ -181,7 +188,7 @@ struct SettingsContentView: View {
 
     private var scopeInfo: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("FINE-GRAINED PAT SCOPES")
+            Text("APP REQUIREMENTS")
                 .font(.system(size: 9, weight: .bold))
                 .tracking(1.2)
                 .foregroundColor(.textMuted)
@@ -193,6 +200,14 @@ struct SettingsContentView: View {
                     .init(name: "Actions: Read", isOptional: true),
                 ]
             )
+
+            Text(
+                "Grant repository access to every repo you want tracked. "
+                    + "This app shows pull requests involving the authenticated account."
+            )
+            .font(.system(size: 10))
+            .foregroundColor(.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -201,6 +216,108 @@ struct SettingsContentView: View {
             ForEach(scopes) { scope in
                 scopeBadge(scope.name, optional: scope.isOptional)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var tokenAccessSection: some View {
+        if isLoadingTokenAccess {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Loading token access…")
+                    .font(.system(size: 11))
+                    .foregroundColor(.textSecondary)
+            }
+        } else if let tokenAccessDetails {
+            VStack(alignment: .leading, spacing: 12) {
+                tokenPermissionsSection(details: tokenAccessDetails)
+                accessibleRepositoriesSection(details: tokenAccessDetails)
+            }
+        } else if let tokenAccessErrorMessage {
+            Text(tokenAccessErrorMessage)
+                .font(.system(size: 11))
+                .foregroundColor(.statusRed)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func tokenPermissionsSection(details: TokenAccessDetails) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("REPORTED PERMISSIONS")
+                .font(.system(size: 9, weight: .bold))
+                .tracking(1.2)
+                .foregroundColor(.textMuted)
+
+            if details.oauthScopes.isEmpty {
+                Text(
+                    "GitHub did not report OAuth scopes for this token. "
+                        + "Fine-grained personal access token permissions are not "
+                        + "fully introspectable via the REST API."
+                )
+                .font(.system(size: 10))
+                .foregroundColor(.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
+                scopeRow(scopes: details.oauthScopes.map { ScopeItem(name: $0) })
+            }
+        }
+    }
+
+    private func accessibleRepositoriesSection(details: TokenAccessDetails) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("ACCESSIBLE REPOSITORIES")
+                    .font(.system(size: 9, weight: .bold))
+                    .tracking(1.2)
+                    .foregroundColor(.textMuted)
+                Spacer()
+                Text("\(details.accessibleRepositories.count)")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(.textTertiary)
+            }
+
+            if details.accessibleRepositories.isEmpty {
+                Text("No accessible repositories were returned for this token.")
+                    .font(.system(size: 10))
+                    .foregroundColor(.textTertiary)
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(details.accessibleRepositories) { repository in
+                        accessibleRepositoryRow(repository)
+                    }
+                }
+            }
+        }
+    }
+
+    private func accessibleRepositoryRow(_ repository: TokenAccessDetails.AccessibleRepository) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(repository.fullName)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(.textSecondary)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            Text(repository.accessLevel.rawValue)
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundColor(accessLevelColor(repository.accessLevel))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(accessLevelColor(repository.accessLevel).opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+        }
+    }
+
+    private func accessLevelColor(_ accessLevel: TokenAccessDetails.AccessibleRepository.AccessLevel) -> Color {
+        switch accessLevel {
+        case .admin:
+            .statusRed
+        case .write:
+            .statusYellow
+        case .read:
+            .statusGreen
         }
     }
 
@@ -317,6 +434,7 @@ struct SettingsContentView: View {
                 } else {
                     tokenState = .unvalidated
                 }
+                refreshTokenAccessDetails(using: saved)
             }
         } catch {
             tokenInput = ""
@@ -336,6 +454,7 @@ struct SettingsContentView: View {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     tokenState = .valid(username: username)
                 }
+                refreshTokenAccessDetails(using: tokenInput)
                 appState.resetPolling()
             } catch {
                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -347,6 +466,7 @@ struct SettingsContentView: View {
     }
 
     private func clearToken() {
+        clearTokenAccessState()
         do {
             try KeychainService.shared.deleteToken()
         } catch {
@@ -356,7 +476,52 @@ struct SettingsContentView: View {
         withAnimation(.easeInOut(duration: 0.2)) {
             tokenState = .empty
         }
-        appState.resetPolling()
+        appState.stopPollingForMissingToken()
+    }
+
+    private func clearTokenAccessState() {
+        tokenAccessTask?.cancel()
+        tokenAccessTask = nil
+        tokenAccessDetails = nil
+        tokenAccessErrorMessage = nil
+        isLoadingTokenAccess = false
+    }
+
+    private func refreshTokenAccessDetails(using token: String) {
+        clearTokenAccessState()
+        isLoadingTokenAccess = true
+
+        tokenAccessTask = Task { @MainActor in
+            defer {
+                isLoadingTokenAccess = false
+                tokenAccessTask = nil
+            }
+
+            do {
+                let details = try await GitHubRESTClient(token: token).fetchTokenAccessDetails()
+                guard !Task.isCancelled, tokenInput == token else { return }
+
+                tokenAccessDetails = details
+                tokenAccessErrorMessage = nil
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    tokenState = .valid(username: details.username)
+                }
+            } catch let error as AppError {
+                guard !Task.isCancelled, tokenInput == token else { return }
+
+                if error == .authError {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        tokenState = .invalid
+                    }
+                }
+
+                tokenAccessErrorMessage =
+                    error.errorDescription ?? "Unable to load token access details right now."
+            } catch {
+                guard !Task.isCancelled, tokenInput == token else { return }
+                tokenAccessErrorMessage = "Unable to load token access details right now."
+            }
+        }
     }
 }
 

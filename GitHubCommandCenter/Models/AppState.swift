@@ -68,6 +68,24 @@ final class AppState: ObservableObject {
         return needsAction.contains { $0.urgencyScore >= 3 } ? .red : .yellow
     }
 
+    var panelSubtitleText: String {
+        switch authenticationStatus {
+        case .authenticated:
+            return "\(prs.count) tracked PR\(prs.count == 1 ? "" : "s")"
+        default:
+            return "\(prs.count) open PR\(prs.count == 1 ? "" : "s")"
+        }
+    }
+
+    var emptyStateMessage: String? {
+        guard !isLoading, prs.isEmpty else { return nil }
+        guard case .authenticated(let username) = authenticationStatus else { return nil }
+
+        return
+            "This app tracks pull requests involving @\(username). "
+            + "If you expected results here, make sure your GitHub token can access those repositories."
+    }
+
     var panelContentState: PanelContentState {
         if isLoading {
             return .loading
@@ -95,20 +113,26 @@ final class AppState: ObservableObject {
     private var pollingEngine: (any PollingControlling)?
     private let makePollingEngine: (AppState) -> any PollingControlling
     private let requestNotificationPermission: () async -> Void
+    private let preloadTokenIfNeeded: () -> Void
     private var cachedNeedsActionPRs: [PRState] = []
     private var cachedWaitingOnOthersPRs: [PRState] = []
 
     init() {
         self.makePollingEngine = { PollingEngine(appState: $0) }
         self.requestNotificationPermission = { await NotificationService.shared.requestPermission() }
+        self.preloadTokenIfNeeded = {
+            _ = EnvironmentTokenBootstrapper().preloadIfNeeded()
+        }
     }
 
     init(
         makePollingEngine: @escaping (AppState) -> any PollingControlling,
-        requestNotificationPermission: @escaping () async -> Void
+        requestNotificationPermission: @escaping () async -> Void,
+        preloadTokenIfNeeded: @escaping () -> Void = {}
     ) {
         self.makePollingEngine = makePollingEngine
         self.requestNotificationPermission = requestNotificationPermission
+        self.preloadTokenIfNeeded = preloadTokenIfNeeded
     }
 
     private func clearPublishedSessionState() {
@@ -134,6 +158,7 @@ final class AppState: ObservableObject {
 
     func startPollingIfNeeded() {
         guard pollingEngine == nil else { return }
+        preloadTokenIfNeeded()
         let engine = makePollingEngine(self)
         pollingEngine = engine
         // Intentionally fire-and-forget: notification permission is non-fatal and should not block startup.
@@ -156,6 +181,15 @@ final class AppState: ObservableObject {
     func clearSessionStateForNewSession() {
         pollingEngine?.reset()
         clearPublishedSessionState()
+    }
+
+    func stopPollingForMissingToken() {
+        pollingEngine?.reset()
+        pollingEngine?.stop()
+        pollingEngine = nil
+        clearPublishedSessionState()
+        isLoading = false
+        authenticationStatus = .noToken
     }
 
     func resetPolling() {

@@ -33,6 +33,17 @@ actor GitHubRESTClient: GitHubDataSource {
         return username
     }
 
+    func fetchTokenAccessDetails() async throws -> TokenAccessDetails {
+        let userResponse = try await getResponse("/user")
+        let user = try decode(GitHubUser.self, from: userResponse.data)
+
+        return TokenAccessDetails(
+            username: user.login,
+            oauthScopes: parseOAuthScopes(from: userResponse.response),
+            accessibleRepositories: try await fetchAccessibleRepositories()
+        )
+    }
+
     func fetchAllPRStates(username: String) async throws -> [PRState] {
         let searchItems = try await searchOpenPRs(username: username)
         return try await withThrowingTaskGroup(of: PRState?.self) { group in
@@ -221,6 +232,26 @@ actor GitHubRESTClient: GitHubDataSource {
         }
     }
 
+    private func fetchAccessibleRepositories() async throws -> [TokenAccessDetails.AccessibleRepository] {
+        let perPage = 100
+        var page = 1
+        var repositories: [TokenAccessDetails.AccessibleRepository] = []
+
+        while true {
+            let path =
+                "/user/repos?affiliation=owner,collaborator,organization_member&per_page=\(perPage)&page=\(page)"
+            let data = try await get(path)
+            let pageRepositories = try decode([AccessibleRepositoryResponse].self, from: data)
+            repositories.append(contentsOf: pageRepositories.map(\.tokenAccessRepository))
+
+            if pageRepositories.count < perPage {
+                return repositories
+            }
+
+            page += 1
+        }
+    }
+
     // MARK: - State builders
 
     private func buildCIStatus(
@@ -318,6 +349,14 @@ actor GitHubRESTClient: GitHubDataSource {
         }
     }
 
+    private func getResponse(_ path: String) async throws -> HTTPDataResponse {
+        do {
+            return try await requestResponse(path)
+        } catch {
+            throw mapRequestError(error)
+        }
+    }
+
     private func requestData(
         _ path: String,
         allowRetryWithoutETag: Bool = true
@@ -383,6 +422,48 @@ actor GitHubRESTClient: GitHubDataSource {
         }
     }
 
+    private func requestResponse(_ path: String) async throws -> HTTPDataResponse {
+        guard let url = URL(string: "https://api.github.com\(path)") else {
+            throw RequestError.app(.networkError)
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw RequestError.app(.networkError)
+        }
+
+        guard let http = response as? HTTPURLResponse else {
+            throw RequestError.app(.networkError)
+        }
+
+        switch http.statusCode {
+        case 200:
+            return HTTPDataResponse(data: data, response: http)
+        case 401:
+            throw RequestError.statusCode(401)
+        case 403:
+            if isRateLimitedResponse(data, http) {
+                throw RequestError.app(.rateLimitExceeded(resetAt: rateLimitResetDate(from: http)))
+            }
+            throw RequestError.statusCode(403)
+        case 404:
+            throw RequestError.statusCode(404)
+        case 429:
+            throw RequestError.app(.rateLimitExceeded(resetAt: rateLimitResetDate(from: http)))
+        case 500...599:
+            throw RequestError.app(.serverError(statusCode: http.statusCode))
+        default:
+            throw RequestError.app(.networkError)
+        }
+    }
+
     private func mapRequestError(_ error: Error) -> Error {
         switch error {
         case let requestError as RequestError:
@@ -420,6 +501,13 @@ actor GitHubRESTClient: GitHubDataSource {
         }
 
         return apiError.message.localizedCaseInsensitiveContains("rate limit")
+    }
+
+    private func parseOAuthScopes(from response: HTTPURLResponse) -> [String] {
+        response.value(forHTTPHeaderField: "X-OAuth-Scopes")?
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
     }
 
     private func extractRepoName(from repositoryURL: String) -> String? {
@@ -467,6 +555,11 @@ actor GitHubRESTClient: GitHubDataSource {
 
     private struct APIErrorResponse: Codable, Sendable {
         let message: String
+    }
+
+    private struct HTTPDataResponse {
+        let data: Data
+        let response: HTTPURLResponse
     }
 
     private struct GitHubUser: Codable, Sendable {
@@ -524,5 +617,32 @@ actor GitHubRESTClient: GitHubDataSource {
     private struct CommitStatus: Codable, Sendable {
         let context: String
         let state: String
+    }
+
+    private struct AccessibleRepositoryResponse: Codable, Sendable {
+        let id: Int
+        let fullName: String
+        let permissions: RepositoryPermissions?
+
+        var tokenAccessRepository: TokenAccessDetails.AccessibleRepository {
+            TokenAccessDetails.AccessibleRepository(
+                id: id,
+                fullName: fullName,
+                accessLevel: accessLevel
+            )
+        }
+
+        private var accessLevel: TokenAccessDetails.AccessibleRepository.AccessLevel {
+            guard let permissions else { return .read }
+            if permissions.admin { return .admin }
+            if permissions.push { return .write }
+            return .read
+        }
+    }
+
+    private struct RepositoryPermissions: Codable, Sendable {
+        let admin: Bool
+        let push: Bool
+        let pull: Bool
     }
 }
