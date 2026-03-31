@@ -16,7 +16,7 @@ struct MenuBarIconView: View {
     }
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: Spacing.xxxs) {
             if isLoading {
                 MenuBarLoadingIndicator()
             } else {
@@ -34,15 +34,16 @@ struct MenuBarIconView: View {
 private struct MenuBarLoadingIndicator: View {
     @State private var tick = false
 
-    let timer = Timer.publish(every: 0.7, on: .main, in: .common).autoconnect()
-
     var body: some View {
         Image(systemName: "arrow.triangle.2.circlepath")
             .imageScale(.medium)
             .opacity(tick ? 1.0 : 0.35)
-            .onReceive(timer) { _ in
-                withAnimation(.easeInOut(duration: 0.35)) {
-                    tick.toggle()
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(700))
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        tick.toggle()
+                    }
                 }
             }
     }

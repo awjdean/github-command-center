@@ -65,7 +65,7 @@ struct PRListView: View {
                 .help("Back")
             }
 
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: Spacing.hairline) {
                 Text(panelMode.headerTitle)
                     .font(.panelTitle)
                     .foregroundColor(.textPrimary)
@@ -85,8 +85,8 @@ struct PRListView: View {
                 .help("Settings")
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, Spacing.xl)
+        .padding(.vertical, Spacing.lg)
     }
 
     private var panelSubtitle: String {
@@ -216,9 +216,9 @@ struct PRListView: View {
             .tracking(1)
             .foregroundColor(.textMuted)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
+            .padding(.horizontal, Spacing.xl)
+            .padding(.top, Spacing.md)
+            .padding(.bottom, Spacing.xxs)
     }
 
     // MARK: - Loading skeleton
@@ -235,7 +235,7 @@ struct PRListView: View {
     // MARK: - Empty state
 
     private var emptyStateView: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: Spacing.sm) {
             Image(systemName: "checkmark.circle")
                 .font(.system(size: 28))
                 .foregroundColor(.statusGreen)
@@ -247,15 +247,15 @@ struct PRListView: View {
                     .font(.footerText)
                     .foregroundColor(.textTertiary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, Spacing.xxl)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
+        .padding(.vertical, Spacing.xxxl)
     }
 
     private var setupStateView: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: Spacing.sm) {
             Image(systemName: "key.fill")
                 .font(.system(size: 28))
                 .foregroundColor(.statusYellow)
@@ -265,12 +265,12 @@ struct PRListView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 40)
+        .padding(.horizontal, Spacing.xxl)
+        .padding(.vertical, Spacing.xxxl)
     }
 
     private var authFailedStateView: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: Spacing.sm) {
             Image(systemName: "exclamationmark.circle")
                 .font(.system(size: 28))
                 .foregroundColor(.statusRed)
@@ -280,12 +280,12 @@ struct PRListView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 40)
+        .padding(.horizontal, Spacing.xxl)
+        .padding(.vertical, Spacing.xxxl)
     }
 
     private var loadErrorStateView: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: Spacing.md) {
             Image(systemName: "wifi.exclamationmark")
                 .font(.system(size: 28))
                 .foregroundColor(.statusRed)
@@ -299,8 +299,8 @@ struct PRListView: View {
             .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 40)
+        .padding(.horizontal, Spacing.xxl)
+        .padding(.vertical, Spacing.xxxl)
     }
 
     // MARK: - Error banners
@@ -340,8 +340,8 @@ struct PRListView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Spacing.xl)
+        .padding(.vertical, Spacing.sm)
         .background(color.opacity(0.15))
     }
 
@@ -355,8 +355,8 @@ struct PRListView: View {
                 .foregroundColor(.textSecondary)
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
+        .padding(.horizontal, Spacing.xl)
+        .padding(.vertical, Spacing.xs)
         .background(color.opacity(0.12))
     }
 
@@ -392,8 +392,8 @@ struct PRListView: View {
                     .help("Refresh (⌘R)")
                     .keyboardShortcut("r", modifiers: .command)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, Spacing.xl)
+                .padding(.vertical, Spacing.sm)
             }
         }
     }
@@ -431,7 +431,7 @@ struct PRListView: View {
 @MainActor
 private func previewAppState(with prs: [PRState] = []) -> AppState {
     let appState = AppState(
-        makePollingEngine: { _ in PreviewPollingController() },
+        makePollingEngine: { _ in NoOpPollingController() },
         requestNotificationPermission: {}
     )
     appState.isLoading = false
@@ -490,14 +490,6 @@ private func previewURL(_ string: String) -> URL {
     return url
 }
 
-@MainActor
-private final class PreviewPollingController: PollingControlling {
-    func start() {}
-    func stop() {}
-    func reset() {}
-    func forceRefresh() {}
-}
-
 // MARK: - Skeleton row
 
 private struct SkeletonRowView: View {
@@ -505,8 +497,25 @@ private struct SkeletonRowView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 6) {
+        skeletonContent
+            .overlay(alignment: .leading) {
+                shimmerSweep
+                    .mask(skeletonContent)
+            }
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                    shimmerOffset = 200
+                }
+            }
+            .onDisappear {
+                shimmerOffset = -200
+            }
+    }
+
+    private var skeletonContent: some View {
+        HStack(spacing: Spacing.sm) {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
                 RoundedRectangle(cornerRadius: 3).fill(shimmerColor).frame(width: 60, height: 10)
                 RoundedRectangle(cornerRadius: 3).fill(shimmerColor).frame(
                     maxWidth: .infinity,
@@ -524,17 +533,25 @@ private struct SkeletonRowView: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
-                shimmerOffset = 200
-            }
-        }
+        .padding(.horizontal, Spacing.xl)
+        .padding(.vertical, Spacing.sm)
     }
 
     private var shimmerColor: Color {
         Color.panelSurface.opacity(0.8)
+    }
+
+    private var shimmerSweep: some View {
+        LinearGradient(
+            colors: [
+                shimmerColor.opacity(0),
+                shimmerColor.opacity(0.9),
+                shimmerColor.opacity(0),
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        .frame(width: 120)
+        .offset(x: shimmerOffset)
     }
 }

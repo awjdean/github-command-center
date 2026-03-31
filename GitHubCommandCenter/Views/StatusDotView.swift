@@ -216,7 +216,7 @@ private struct CIFailingPopoverView: View {
     let totalChecks: Int
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
             Text("CI")
                 .font(.sectionLabel)
                 .tracking(0.5)
@@ -229,26 +229,26 @@ private struct CIFailingPopoverView: View {
             Divider().background(Color.textMuted.opacity(0.3))
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(Array(checks.enumerated()), id: \.offset) { _, check in
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    ForEach(checks) { check in
                         failingCheckRow(check)
                     }
                 }
             }
             .frame(maxHeight: 300)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, Spacing.lg)
+        .padding(.vertical, Spacing.md)
         .frame(maxWidth: 320)
     }
 
     private func failingCheckRow(_ check: PRState.FailingCheck) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Spacing.xs) {
             Circle()
                 .fill(Color.statusRed)
                 .frame(width: 6, height: 6)
 
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: Spacing.hairline) {
                 if let url = check.url {
                     Button {
                         NSWorkspace.shared.open(url)
@@ -294,7 +294,7 @@ private struct StatusPopoverView: View {
     let detail: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
             Text(label)
                 .font(.sectionLabel)
                 .tracking(0.5)
@@ -303,8 +303,8 @@ private struct StatusPopoverView: View {
                 .font(.footerText)
                 .foregroundColor(.textSecondary)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, Spacing.sm)
         .fixedSize()
     }
 }
