@@ -28,7 +28,7 @@ struct PRStateTests {
     @Test
     func triageCategory_createdByMe_ciFailing_needsAction() {
         let pr = PRState.fixture(
-            ciStatus: .failing(failingCheckNames: ["unit-tests"], totalChecks: 3),
+            ciStatus: .failing(checks: [.init(name: "unit-tests", conclusion: "failure", url: nil)], totalChecks: 3),
             createdByMe: true
         )
 
@@ -48,6 +48,12 @@ struct PRStateTests {
     @Test
     func triageCategory_createdByMe_mergeConflicts_needsAction() {
         let pr = PRState.fixture(mergeStatus: .conflicts, createdByMe: true)
+        #expect(pr.triageCategory == .needsYourAction)
+    }
+
+    @Test
+    func triageCategory_createdByMe_branchBehind_needsAction() {
+        let pr = PRState.fixture(mergeStatus: .behind, createdByMe: true)
         #expect(pr.triageCategory == .needsYourAction)
     }
 
@@ -123,7 +129,7 @@ struct PRStateTests {
     @Test
     func urgencyScore_ciFailing_yourPR_adds3() {
         let pr = PRState.fixture(
-            ciStatus: .failing(failingCheckNames: ["test"], totalChecks: 1),
+            ciStatus: .failing(checks: [.init(name: "test", conclusion: "failure", url: nil)], totalChecks: 1),
             createdByMe: true
         )
 
@@ -133,7 +139,7 @@ struct PRStateTests {
     @Test
     func urgencyScore_ciFailing_notYourPR_doesNotAdd() {
         let pr = PRState.fixture(
-            ciStatus: .failing(failingCheckNames: ["test"], totalChecks: 1),
+            ciStatus: .failing(checks: [.init(name: "test", conclusion: "failure", url: nil)], totalChecks: 1),
             createdByMe: false
         )
 
@@ -167,6 +173,12 @@ struct PRStateTests {
     }
 
     @Test
+    func urgencyScore_branchBehind_adds2() {
+        let pr = PRState.fixture(mergeStatus: .behind)
+        #expect(pr.urgencyScore >= 2)
+    }
+
+    @Test
     func urgencyScore_reviewRequestedFromMe_adds2() {
         let pr = PRState.fixture(reviewRequestedFromMe: true)
         #expect(pr.urgencyScore >= 2)
@@ -193,7 +205,7 @@ struct PRStateTests {
     func urgencyScore_draft_alwaysZero() {
         let pr = PRState.fixture(
             draftStatus: .draft,
-            ciStatus: .failing(failingCheckNames: ["test"], totalChecks: 1),
+            ciStatus: .failing(checks: [.init(name: "test", conclusion: "failure", url: nil)], totalChecks: 1),
             reviewStatus: .changesRequested(by: ["reviewer"]),
             mergeStatus: .conflicts,
             createdByMe: true,
@@ -207,7 +219,7 @@ struct PRStateTests {
     @Test
     func urgencyScore_multipleFlags_addsUp() {
         let pr = PRState.fixture(
-            ciStatus: .failing(failingCheckNames: ["test"], totalChecks: 1),
+            ciStatus: .failing(checks: [.init(name: "test", conclusion: "failure", url: nil)], totalChecks: 1),
             reviewStatus: .changesRequested(by: ["reviewer"]),
             mergeStatus: .conflicts,
             createdByMe: true

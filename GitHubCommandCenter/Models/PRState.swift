@@ -18,9 +18,15 @@ struct PRState: Identifiable, Equatable, Sendable {
         case ready
     }
 
+    struct FailingCheck: Equatable, Sendable {
+        let name: String
+        let conclusion: String  // "failure", "timed_out", "cancelled", "action_required", "error"
+        let url: URL?
+    }
+
     enum CIStatus: Equatable, Sendable {
         case passing
-        case failing(failingCheckNames: [String], totalChecks: Int)
+        case failing(checks: [FailingCheck], totalChecks: Int)
         case pending
         case none  // no CI configured
     }
@@ -36,6 +42,7 @@ struct PRState: Identifiable, Equatable, Sendable {
     enum MergeStatus: Equatable, Sendable {
         case ready  // "clean"
         case conflicts  // "dirty"
+        case behind  // branch needs updating before merge
         case blocked  // "blocked" — branch protection not satisfied
         case pending  // "unknown" or null — not yet computed
     }
@@ -74,7 +81,7 @@ struct PRState: Identifiable, Equatable, Sendable {
             let ciNeedsAction: Bool
             if case .failing = ciStatus { ciNeedsAction = true } else { ciNeedsAction = false }
 
-            let mergeNeedsAction = mergeStatus == .conflicts
+            let mergeNeedsAction = mergeStatus == .conflicts || mergeStatus == .behind
 
             let reviewNeedsAction: Bool
             switch reviewStatus {
@@ -96,7 +103,7 @@ struct PRState: Identifiable, Equatable, Sendable {
         var score = 0
         if case .failing = ciStatus, assignment.createdByMe { score += 3 }
         if case .changesRequested = reviewStatus, assignment.createdByMe { score += 3 }
-        if mergeStatus == .conflicts { score += 2 }
+        if mergeStatus == .conflicts || mergeStatus == .behind { score += 2 }
         if assignment.reviewRequestedFromMe { score += 2 }
         if assignment.assignedToMe && !assignment.createdByMe { score += 1 }
         if case .approved = reviewStatus, mergeStatus == .ready, assignment.createdByMe { score += 1 }

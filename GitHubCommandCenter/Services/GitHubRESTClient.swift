@@ -29,7 +29,7 @@ actor GitHubRESTClient: GitHubDataSource {
 
     func validateTokenForAppAccess() async throws -> String {
         let username = try await validateToken()
-        _ = try await searchOpenPRs(username: username, perPage: 1)
+        _ = try await searchOpenPRsPage(username: username, perPage: 1, page: 1)
         return username
     }
 
@@ -82,6 +82,20 @@ actor GitHubRESTClient: GitHubDataSource {
 
     // MARK: - Search
 
+    private func searchOpenPRsPage(username: String, perPage: Int, page: Int) async throws -> SearchResponse {
+        let query = "is:pr is:open involves:\(username)"
+        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            throw AppError.networkError
+        }
+        let path = "/search/issues?q=\(encoded)&per_page=\(perPage)&page=\(page)&sort=updated&order=desc"
+        let data = try await get(path)
+        let response = try decode(SearchResponse.self, from: data)
+        if response.incompleteResults {
+            throw AppError.incompleteSearchResults
+        }
+        return response
+    }
+
     private func searchOpenPRs(username: String, perPage: Int = 100) async throws -> [SearchItem] {
         var allItems: [SearchItem] = []
         var page = 1
@@ -90,16 +104,7 @@ actor GitHubRESTClient: GitHubDataSource {
             guard page <= Self.searchResultsMaxPageLimit else {
                 throw AppError.paginationLimitExceeded
             }
-            let query = "is:pr is:open involves:\(username)"
-            guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-                throw AppError.networkError
-            }
-            let path = "/search/issues?q=\(encoded)&per_page=\(perPage)&page=\(page)&sort=updated&order=desc"
-            let data = try await get(path)
-            let response = try decode(SearchResponse.self, from: data)
-            if response.incompleteResults {
-                throw AppError.incompleteSearchResults
-            }
+            let response = try await searchOpenPRsPage(username: username, perPage: perPage, page: page)
 
             allItems.append(contentsOf: response.items)
             if allItems.count >= response.totalCount || response.items.count < perPage { break }
@@ -269,9 +274,23 @@ actor GitHubRESTClient: GitHubDataSource {
         }
         let failingCommitStatuses = latestStatuses.filter { ["error", "failure"].contains($0.state) }
 
-        let failingNames = failingCheckRuns.map(\.name) + failingCommitStatuses.map(\.context)
-        if !failingNames.isEmpty {
-            return .failing(failingCheckNames: failingNames, totalChecks: totalChecks)
+        let failingChecks: [PRState.FailingCheck] =
+            failingCheckRuns.map { run in
+                PRState.FailingCheck(
+                    name: run.name,
+                    conclusion: run.conclusion ?? "failure",
+                    url: run.htmlUrl.flatMap(URL.init(string:))
+                )
+            }
+            + failingCommitStatuses.map { status in
+                PRState.FailingCheck(
+                    name: status.context,
+                    conclusion: status.state,
+                    url: status.targetUrl.flatMap(URL.init(string:))
+                )
+            }
+        if !failingChecks.isEmpty {
+            return .failing(checks: failingChecks, totalChecks: totalChecks)
         }
 
         let hasPending = checkRuns.contains { $0.status != "completed" }
@@ -319,6 +338,8 @@ actor GitHubRESTClient: GitHubDataSource {
         case "clean": return .ready
         case "dirty": return .conflicts
         case "blocked": return .blocked
+        case "behind": return .behind
+        case "has_hooks": return .blocked
         case "unstable": return .ready  // mergeable despite failing checks; CI tracked separately
         default: return .pending  // "unknown", nil, or any future undocumented value
         }
@@ -607,6 +628,7 @@ actor GitHubRESTClient: GitHubDataSource {
         let name: String
         let status: String
         let conclusion: String?
+        let htmlUrl: String?
     }
 
     private struct CombinedStatusResponse: Codable, Sendable {
@@ -617,6 +639,7 @@ actor GitHubRESTClient: GitHubDataSource {
     private struct CommitStatus: Codable, Sendable {
         let context: String
         let state: String
+        let targetUrl: String?
     }
 
     private struct AccessibleRepositoryResponse: Codable, Sendable {

@@ -20,7 +20,7 @@ struct NotificationServiceTests {
         let harness = Harness()
         let old = PRState.fixture(ciStatus: .passing, createdByMe: true)
         let new = PRState.fixture(
-            ciStatus: .failing(failingCheckNames: ["unit-tests"], totalChecks: 3),
+            ciStatus: .failing(checks: [.init(name: "unit-tests", conclusion: "failure", url: nil)], totalChecks: 3),
             createdByMe: true
         )
 
@@ -35,7 +35,7 @@ struct NotificationServiceTests {
         let harness = Harness()
         let old = PRState.fixture(ciStatus: .passing, createdByMe: false)
         let new = PRState.fixture(
-            ciStatus: .failing(failingCheckNames: ["test"], totalChecks: 1),
+            ciStatus: .failing(checks: [.init(name: "test", conclusion: "failure", url: nil)], totalChecks: 1),
             createdByMe: false
         )
 
@@ -49,7 +49,7 @@ struct NotificationServiceTests {
         let harness = Harness()
         let old = PRState.fixture(ciStatus: .none, createdByMe: true)
         let new = PRState.fixture(
-            ciStatus: .failing(failingCheckNames: ["lint"], totalChecks: 1),
+            ciStatus: .failing(checks: [.init(name: "lint", conclusion: "failure", url: nil)], totalChecks: 1),
             createdByMe: true
         )
 
@@ -63,7 +63,7 @@ struct NotificationServiceTests {
         let harness = Harness()
         let old = PRState.fixture(ciStatus: .pending, createdByMe: true)
         let new = PRState.fixture(
-            ciStatus: .failing(failingCheckNames: ["build"], totalChecks: 1),
+            ciStatus: .failing(checks: [.init(name: "build", conclusion: "failure", url: nil)], totalChecks: 1),
             createdByMe: true
         )
 
@@ -77,11 +77,11 @@ struct NotificationServiceTests {
     func notification_ciFailingToFailing_noRepeat() {
         let harness = Harness()
         let old = PRState.fixture(
-            ciStatus: .failing(failingCheckNames: ["test"], totalChecks: 1),
+            ciStatus: .failing(checks: [.init(name: "test", conclusion: "failure", url: nil)], totalChecks: 1),
             createdByMe: true
         )
         let new = PRState.fixture(
-            ciStatus: .failing(failingCheckNames: ["test"], totalChecks: 1),
+            ciStatus: .failing(checks: [.init(name: "test", conclusion: "failure", url: nil)], totalChecks: 1),
             createdByMe: true
         )
 
@@ -222,7 +222,7 @@ struct NotificationServiceTests {
     func notification_newPRWithoutBaseline_isSilent() {
         let harness = Harness()
         let new = PRState.fixture(
-            ciStatus: .failing(failingCheckNames: ["test"], totalChecks: 1),
+            ciStatus: .failing(checks: [.init(name: "test", conclusion: "failure", url: nil)], totalChecks: 1),
             reviewStatus: .changesRequested(by: ["alice"]),
             createdByMe: true
         )
@@ -237,7 +237,7 @@ struct NotificationServiceTests {
         let harness = Harness()
         let old = PRState.fixture(ciStatus: .pending, createdByMe: false)
         let new = PRState.fixture(
-            ciStatus: .failing(failingCheckNames: ["build"], totalChecks: 1),
+            ciStatus: .failing(checks: [.init(name: "build", conclusion: "failure", url: nil)], totalChecks: 1),
             createdByMe: false
         )
 

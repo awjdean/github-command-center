@@ -22,7 +22,7 @@ extension GitHubRESTClientTests {
     }
 
     @Test
-    func validateTokenForAppAccess_searchPaginationLimitExceeded_throwsPaginationLimitExceeded() async {
+    func validateTokenForAppAccess_largeSearchResultOnlyRequestsFirstPage() async throws {
         let harness = Harness()
         MockURLProtocol.stub(
             urlContains: "/user",
@@ -30,36 +30,33 @@ extension GitHubRESTClientTests {
             json: ["login": "octocat"]
         )
 
-        for page in 1...100 {
-            MockURLProtocol.stub(
-                urlContains: "per_page=1&page=\(page)&sort=updated&order=desc",
-                json: [
-                    "total_count": 101,
-                    "incomplete_results": false,
-                    "items": [
-                        [
-                            "number": page,
-                            "title": "PR \(page)",
-                            "html_url": "https://github.com/org/repo/pull/\(page)",
-                            "draft": false,
-                            "updated_at": "2026-03-30T10:00:00Z",
-                            "repository_url": "https://api.github.com/repos/org/repo",
-                        ]
-                    ],
-                ]
-            )
-        }
+        MockURLProtocol.stub(
+            urlContains: "per_page=1&page=1&sort=updated&order=desc",
+            json: [
+                "total_count": 101,
+                "incomplete_results": false,
+                "items": [
+                    [
+                        "number": 1,
+                        "title": "PR 1",
+                        "html_url": "https://github.com/org/repo/pull/1",
+                        "draft": false,
+                        "updated_at": "2026-03-30T10:00:00Z",
+                        "repository_url": "https://api.github.com/repos/org/repo",
+                    ]
+                ],
+            ]
+        )
 
         let client = GitHubRESTClient(token: "test-token", session: harness.session)
+        let username = try await client.validateTokenForAppAccess()
 
-        do {
-            _ = try await client.validateTokenForAppAccess()
-            Issue.record("Expected paginationLimitExceeded")
-        } catch let error as AppError {
-            #expect(error == .paginationLimitExceeded)
-        } catch {
-            Issue.record("Unexpected error: \(error)")
+        #expect(username == "octocat")
+        let searchRequests = MockURLProtocol.capturedRequests.filter {
+            $0.url?.absoluteString.contains("/search/issues") == true
         }
+        #expect(searchRequests.count == 1)
+        #expect(searchRequests.first?.url?.absoluteString.contains("per_page=1&page=1") == true)
     }
 
     @Test

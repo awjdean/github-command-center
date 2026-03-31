@@ -351,9 +351,9 @@ struct GitHubRESTClientTests {
         let prs = try await client.fetchAllPRStates(username: "octocat")
         let pr = try #require(prs.first)
 
-        if case .failing(let names, let total) = pr.ciStatus {
-            #expect(names == ["unit-tests"])
-            #expect(total == 2)
+        if case .failing(let checks, let total) = pr.ciStatus {
+            #expect(checks.map(\.name) == ["unit-tests"])
+            #expect(checks[0].conclusion == "failure" && total == 2)
         } else {
             Issue.record("Expected .failing, got \(pr.ciStatus)")
         }
@@ -378,8 +378,8 @@ struct GitHubRESTClientTests {
         let prs = try await client.fetchAllPRStates(username: "octocat")
         let pr = try #require(prs.first)
 
-        if case .failing(let names, _) = pr.ciStatus {
-            #expect(names == ["legacy-ci"])
+        if case .failing(let checks, _) = pr.ciStatus {
+            #expect(checks.map(\.name) == ["legacy-ci"])
         } else {
             Issue.record("Expected .failing, got \(pr.ciStatus)")
         }
@@ -417,8 +417,8 @@ struct GitHubRESTClientTests {
         let prs = try await client.fetchAllPRStates(username: "octocat")
         let pr = try #require(prs.first)
 
-        if case .failing(let names, let total) = pr.ciStatus {
-            #expect(names == ["unit-tests"])
+        if case .failing(let checks, let total) = pr.ciStatus {
+            #expect(checks.map(\.name) == ["unit-tests"])
             #expect(total == 2)
         } else {
             Issue.record("Expected .failing, got \(pr.ciStatus)")
@@ -469,8 +469,8 @@ struct GitHubRESTClientTests {
         let prs = try await client.fetchAllPRStates(username: "octocat")
         let pr = try #require(prs.first)
 
-        if case .failing(let names, _) = pr.ciStatus {
-            #expect(names == ["legacy-ci"])
+        if case .failing(let checks, _) = pr.ciStatus {
+            #expect(checks.map(\.name) == ["legacy-ci"])
         } else {
             Issue.record("Expected .failing, got \(pr.ciStatus)")
         }

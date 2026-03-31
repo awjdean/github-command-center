@@ -448,7 +448,7 @@ private let previewPRs = [
         url: previewURL("https://github.com/awjdean/github-command-center/pull/12"),
         headSHA: "abc123",
         draftStatus: .ready,
-        ciStatus: .failing(failingCheckNames: ["unit-tests"], totalChecks: 3),
+        ciStatus: .failing(checks: [.init(name: "unit-tests", conclusion: "failure", url: nil)], totalChecks: 3),
         reviewStatus: .changesRequested(by: ["octocat"]),
         mergeStatus: .conflicts,
         assignment: .init(createdByMe: true, reviewRequestedFromMe: false, assignedToMe: false),

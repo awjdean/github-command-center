@@ -38,7 +38,12 @@ struct StatusDotTooltipTests {
     func ci_failing_singleCheck_detail() {
         let tooltip = StatusDotTooltip(
             dimension: .ci,
-            pr: .fixture(ciStatus: .failing(failingCheckNames: ["unit-tests"], totalChecks: 3))
+            pr: .fixture(
+                ciStatus: .failing(
+                    checks: [.init(name: "unit-tests", conclusion: "failure", url: nil)],
+                    totalChecks: 3
+                )
+            )
         )
         #expect(tooltip.detail == "unit-tests failing (3 total)")
     }
@@ -48,7 +53,14 @@ struct StatusDotTooltipTests {
         let tooltip = StatusDotTooltip(
             dimension: .ci,
             pr: .fixture(
-                ciStatus: .failing(failingCheckNames: ["lint", "unit", "integration"], totalChecks: 5)
+                ciStatus: .failing(
+                    checks: [
+                        .init(name: "lint", conclusion: "failure", url: nil),
+                        .init(name: "unit", conclusion: "failure", url: nil),
+                        .init(name: "integration", conclusion: "failure", url: nil),
+                    ],
+                    totalChecks: 5
+                )
             )
         )
         #expect(tooltip.detail == "lint, unit (+1 more) failing (5 total)")
@@ -122,6 +134,12 @@ struct StatusDotTooltipTests {
     func merge_blocked_detail() {
         let tooltip = StatusDotTooltip(dimension: .merge, pr: .fixture(mergeStatus: .blocked))
         #expect(tooltip.detail == "Merge blocked by branch protection")
+    }
+
+    @Test
+    func merge_behind_detail() {
+        let tooltip = StatusDotTooltip(dimension: .merge, pr: .fixture(mergeStatus: .behind))
+        #expect(tooltip.detail == "Branch is behind base and needs updating")
     }
 
     @Test

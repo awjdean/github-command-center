@@ -31,10 +31,17 @@ struct StatusDotView: View {
         }
         .buttonStyle(.plain)
         .popover(isPresented: $showingPopover, arrowEdge: .bottom) {
-            StatusPopoverView(
-                label: tooltip.label,
-                detail: tooltip.detail
-            )
+            if let failing = tooltip.failingCIChecks {
+                CIFailingPopoverView(
+                    checks: failing.checks,
+                    totalChecks: failing.totalChecks
+                )
+            } else {
+                StatusPopoverView(
+                    label: tooltip.label,
+                    detail: tooltip.detail
+                )
+            }
         }
     }
 
@@ -74,7 +81,7 @@ struct StatusDotView: View {
         switch pr.mergeStatus {
         case .ready: return .statusGreen
         case .conflicts: return .statusRed
-        case .blocked: return .statusYellow
+        case .behind, .blocked: return .statusYellow
         case .pending: return .statusGray
         }
     }
@@ -101,6 +108,7 @@ struct StatusDotView: View {
             switch pr.mergeStatus {
             case .ready: return "M"
             case .conflicts: return "C"
+            case .behind: return "U"
             case .blocked: return "B"
             case .pending: return "~"
             }
@@ -125,7 +133,7 @@ struct StatusDotView: View {
             }
         case .merge:
             switch pr.mergeStatus {
-            case .blocked:
+            case .behind, .blocked:
                 return .black
             case .ready, .conflicts, .pending:
                 return .white
@@ -149,16 +157,24 @@ struct StatusDotTooltip {
         }
     }
 
+    var failingCIChecks: (checks: [PRState.FailingCheck], totalChecks: Int)? {
+        guard dimension == .ci, case .failing(let checks, let total) = pr.ciStatus else {
+            return nil
+        }
+        return (checks, total)
+    }
+
     var detail: String {
         switch dimension {
         case .ci:
             switch pr.ciStatus {
             case .passing:
                 return "All checks passing"
-            case .failing(let names, let total):
-                let failing = names.prefix(2).joined(separator: ", ")
+            case .failing(let checks, let total):
+                let names = checks.map(\.name)
+                let display = names.prefix(2).joined(separator: ", ")
                 let more = names.count > 2 ? " (+\(names.count - 2) more)" : ""
-                return "\(failing)\(more) failing (\(total) total)"
+                return "\(display)\(more) failing (\(total) total)"
             case .pending:
                 return "Checks in progress"
             case .none:
@@ -182,6 +198,8 @@ struct StatusDotTooltip {
                 return "Ready to merge"
             case .conflicts:
                 return "Has merge conflicts"
+            case .behind:
+                return "Branch is behind base and needs updating"
             case .blocked:
                 return "Merge blocked by branch protection"
             case .pending:
@@ -192,6 +210,84 @@ struct StatusDotTooltip {
 }
 
 // MARK: - Popover content
+
+private struct CIFailingPopoverView: View {
+    let checks: [PRState.FailingCheck]
+    let totalChecks: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("CI")
+                .font(.sectionLabel)
+                .tracking(0.5)
+                .foregroundColor(.textTertiary)
+
+            Text("\(checks.count) of \(totalChecks) checks failing")
+                .font(.footerText)
+                .foregroundColor(.textSecondary)
+
+            Divider().background(Color.textMuted.opacity(0.3))
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(checks.enumerated()), id: \.offset) { _, check in
+                        failingCheckRow(check)
+                    }
+                }
+            }
+            .frame(maxHeight: 300)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: 320)
+    }
+
+    private func failingCheckRow(_ check: PRState.FailingCheck) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(Color.statusRed)
+                .frame(width: 6, height: 6)
+
+            VStack(alignment: .leading, spacing: 1) {
+                if let url = check.url {
+                    Button {
+                        NSWorkspace.shared.open(url)
+                    } label: {
+                        Text(check.name)
+                            .font(.tooltipDetail)
+                            .foregroundColor(.linkBlue)
+                            .underline()
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text(check.name)
+                        .font(.tooltipDetail)
+                        .foregroundColor(.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Text(conclusionLabel(check.conclusion))
+                    .font(.tooltipLabel)
+                    .foregroundColor(.textMuted)
+            }
+
+            Spacer()
+        }
+    }
+
+    private func conclusionLabel(_ conclusion: String) -> String {
+        switch conclusion {
+        case "failure": return "Failed"
+        case "timed_out": return "Timed out"
+        case "cancelled": return "Cancelled"
+        case "action_required": return "Action required"
+        case "error": return "Error"
+        case "startup_failure": return "Startup failure"
+        default: return conclusion.capitalized
+        }
+    }
+}
 
 private struct StatusPopoverView: View {
     let label: String

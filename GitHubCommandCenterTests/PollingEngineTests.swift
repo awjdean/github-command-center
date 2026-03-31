@@ -127,7 +127,7 @@ struct PollingEngineTests {
         defer { NotificationService.shared.notificationHandler = nil }
 
         let pr = PRState.fixture(
-            ciStatus: .failing(failingCheckNames: ["test"], totalChecks: 1),
+            ciStatus: .failing(checks: [.init(name: "test", conclusion: "failure", url: nil)], totalChecks: 1),
             reviewStatus: .changesRequested(by: ["alice"]),
             createdByMe: true
         )

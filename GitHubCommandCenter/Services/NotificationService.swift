@@ -30,8 +30,8 @@ final class NotificationService {
                 } else {
                     wasFailing = false
                 }
-                if !wasFailing, case .failing(let names, _) = new.ciStatus {
-                    let check = names.first ?? "a check"
+                if !wasFailing, case .failing(let checks, _) = new.ciStatus {
+                    let check = checks.first?.name ?? "a check"
                     fire(
                         title: "CI Failing — #\(new.number)",
                         body: "\(check) failed on \"\(new.title)\""
