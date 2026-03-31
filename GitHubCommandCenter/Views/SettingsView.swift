@@ -312,7 +312,11 @@ struct SettingsContentView: View {
                 .foregroundColor(Theme.Colors.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             } else {
-                scopeRow(scopes: details.oauthScopes.map { ScopeItem(name: $0) })
+                scopeRow(
+                    scopes: details.oauthScopes.enumerated().map { index, scope in
+                        ScopeItem(id: "oauth-scope-\(index)", name: scope)
+                    }
+                )
             }
         }
     }

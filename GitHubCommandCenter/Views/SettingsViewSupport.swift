@@ -1,9 +1,15 @@
 import SwiftUI
 
 struct ScopeItem: Identifiable {
-    var id: String { name }
+    let id: String
     let name: String
     var isOptional: Bool = false
+
+    init(id: String = UUID().uuidString, name: String, isOptional: Bool = false) {
+        self.id = id
+        self.name = name
+        self.isOptional = isOptional
+    }
 }
 
 private struct SettingsCardModifier: ViewModifier {
