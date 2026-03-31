@@ -305,6 +305,45 @@ struct AppStateTests {
     }
 
     @Test
+    func triageSnapshot_sortsBackingPRsBeforeDerivingSections() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        let waitingOlder = PRState.fixture(
+            number: 1,
+            updatedAt: Date(timeIntervalSince1970: 1_000)
+        )
+        let needsActionNewer = PRState.fixture(
+            number: 2,
+            reviewRequestedFromMe: true,
+            updatedAt: Date(timeIntervalSince1970: 4_000)
+        )
+        let draftNewest = PRState.fixture(
+            number: 3,
+            draftStatus: .draft,
+            createdByMe: true,
+            updatedAt: Date(timeIntervalSince1970: 5_000)
+        )
+        let waitingNewer = PRState.fixture(
+            number: 4,
+            updatedAt: Date(timeIntervalSince1970: 3_000)
+        )
+        let needsActionOlder = PRState.fixture(
+            number: 5,
+            reviewRequestedFromMe: true,
+            updatedAt: Date(timeIntervalSince1970: 2_000)
+        )
+
+        appState.prs = [waitingOlder, needsActionOlder, draftNewest, waitingNewer, needsActionNewer]
+
+        #expect(appState.prs.map(\.number) == [2, 5, 4, 1, 3])
+        #expect(appState.needsActionPRs.map(\.number) == [2, 5])
+        #expect(appState.waitingOnOthersPRs.map(\.number) == [4, 1])
+        #expect(appState.yourDraftPRs.map(\.number) == [3])
+    }
+
+    @Test
     func yourDraftPRs_containsDraftsCreatedByMeOrAssignedToMe() {
         let appState = AppState(
             makePollingEngine: { _ in StubPollingEngine() },

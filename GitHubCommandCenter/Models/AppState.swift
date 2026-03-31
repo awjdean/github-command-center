@@ -51,37 +51,56 @@ final class AppState {
         var healthStatus: HealthStatus
 
         static let empty = build(from: [])
+        private static let triageCategoryPriority: [PRState.TriageCategory: Int] = [
+            .needsYourAction: 0,
+            .waitingOnOthers: 1,
+            .yourDraft: 2,
+        ]
 
         static func build(from prs: [PRState]) -> TriageSnapshot {
-            let needsActionPRs =
-                prs
-                .filter { $0.triageCategory == .needsYourAction }
-                .sorted(using: PRState.needsActionComparator)
-            let waitingOnOthersPRs =
-                prs
-                .filter { $0.triageCategory == .waitingOnOthers }
-                .sorted { $0.updatedAt > $1.updatedAt }
-            let yourDraftPRs =
-                prs
-                .filter { $0.triageCategory == .yourDraft }
-                .sorted { $0.updatedAt > $1.updatedAt }
+            let sortedPRs = prs.sorted(by: triageSortComparator)
+            let needsActionPRs = sortedPRs.filter { $0.triageCategory == .needsYourAction }
+            let waitingOnOthersPRs = sortedPRs.filter { $0.triageCategory == .waitingOnOthers }
+            let yourDraftPRs = sortedPRs.filter { $0.triageCategory == .yourDraft }
             let menuBarBadgeCount = needsActionPRs.count
             let healthStatus: HealthStatus
 
-            if prs.isEmpty || needsActionPRs.isEmpty {
+            if sortedPRs.isEmpty || needsActionPRs.isEmpty {
                 healthStatus = .green
             } else {
                 healthStatus = needsActionPRs.contains { $0.urgencyScore >= 3 } ? .red : .yellow
             }
 
             return TriageSnapshot(
-                prs: prs,
+                prs: sortedPRs,
                 needsActionPRs: needsActionPRs,
                 waitingOnOthersPRs: waitingOnOthersPRs,
                 yourDraftPRs: yourDraftPRs,
                 menuBarBadgeCount: menuBarBadgeCount,
                 healthStatus: healthStatus
             )
+        }
+
+        private static func triageSortComparator(_ lhs: PRState, _ rhs: PRState) -> Bool {
+            let lhsPriority = triageCategoryPriority[lhs.triageCategory] ?? .max
+            let rhsPriority = triageCategoryPriority[rhs.triageCategory] ?? .max
+            if lhsPriority != rhsPriority {
+                return lhsPriority < rhsPriority
+            }
+
+            switch lhs.triageCategory {
+            case .needsYourAction:
+                let comparison = PRState.needsActionComparator.compare(lhs, rhs)
+                if comparison != .orderedSame {
+                    return comparison == .orderedAscending
+                }
+            case .waitingOnOthers, .yourDraft:
+                if lhs.updatedAt != rhs.updatedAt {
+                    return lhs.updatedAt > rhs.updatedAt
+                }
+            }
+
+            return lhs.id < rhs.id
         }
     }
 
@@ -120,7 +139,7 @@ final class AppState {
 
     init() {
         self.makePollingEngine = { PollingEngine(appState: $0) }
-        self.requestNotificationPermission = { await NotificationService.shared.requestPermission() }
+        self.requestNotificationPermission = { _ = await NotificationService.shared.requestPermission() }
         self.preloadTokenIfNeeded = {
             _ = EnvironmentTokenBootstrapper().preloadIfNeeded()
         }
@@ -204,7 +223,7 @@ final class AppState {
 
         if let error = panel.error {
             switch error {
-            case .rateLimitExceeded, .networkError, .serverError, .paginationLimitExceeded:
+            case .keychainError, .rateLimitExceeded, .networkError, .serverError, .paginationLimitExceeded:
                 return .red
             case .incompleteSearchResults:
                 return .yellow
