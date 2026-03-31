@@ -52,7 +52,6 @@ extension GitHubRESTClientTests {
         )
         MockURLProtocol.stub(urlContains: "/pulls/\(number)/reviews?per_page=100&page=1", json: reviews)
         MockURLProtocol.stub(urlContains: "/pulls/\(number)/reviews?per_page=100&page=2", json: [])
-        MockURLProtocol.stub(urlContains: "/pulls/\(number)/reviews", json: reviews)
         if checkRunsStatusCode == 200 {
             MockURLProtocol.stub(
                 urlContains: "/check-runs",

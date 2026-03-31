@@ -328,7 +328,19 @@ actor GitHubRESTClient: GitHubDataSource {
             assignedToMe: detail.assignees.contains { $0.login == username }
         )
 
-        let updatedAt = Self.parseGitHubDate(item.updatedAt) ?? Date()
+        let parsedUpdatedAt = Self.parseGitHubDate(item.updatedAt)
+        let updatedAt: Date
+        if let parsedUpdatedAt {
+            updatedAt = parsedUpdatedAt
+        } else {
+            Self.logger.warning(
+                """
+                Failed to parse updated_at for \(repoFullName, privacy: .public)#\(number, privacy: .public): \
+                \(item.updatedAt, privacy: .public)
+                """
+            )
+            updatedAt = .distantPast
+        }
 
         guard let prURL = URL(string: item.htmlUrl) else { return nil }
 
@@ -762,7 +774,14 @@ actor GitHubRESTClient: GitHubDataSource {
 
     private func evictCacheIfNeeded() {
         guard responseCache.count > maxCacheEntries else { return }
-        responseCache.trim(to: maxCacheEntries)
+        let trimmedTarget = bufferedCacheTrimTarget()
+        guard trimmedTarget < responseCache.count else { return }
+        responseCache.trim(to: trimmedTarget)
+    }
+
+    private func bufferedCacheTrimTarget() -> Int {
+        guard maxCacheEntries > 2 else { return maxCacheEntries }
+        return max(2, Int(Double(maxCacheEntries) * 0.9))
     }
 
     private func requestResponse(_ path: String) async throws -> HTTPDataResponse {

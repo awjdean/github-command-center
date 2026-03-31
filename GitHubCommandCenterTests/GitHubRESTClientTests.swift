@@ -507,7 +507,6 @@ struct GitHubRESTClientTests {
         )
         MockURLProtocol.stub(urlContains: "/pulls/1/reviews?per_page=100&page=1", json: [])
         MockURLProtocol.stub(urlContains: "/pulls/1/reviews?per_page=100&page=2", json: [])
-        MockURLProtocol.stub(urlContains: "/pulls/1/reviews", json: [])
         MockURLProtocol.stub(urlContains: "/check-runs", json: ["total_count": 0, "check_runs": []])
         MockURLProtocol.stub(
             urlContains: "/status",
@@ -832,6 +831,18 @@ struct GitHubRESTClientTests {
         #expect(
             prs.first?.updatedAt == ISO8601DateFormatter().date(from: "2026-03-30T10:00:00Z")
         )
+    }
+
+    @Test
+    func fetchAllPRStates_invalidUpdatedAtFallsBackToDistantPast() async throws {
+        let harness = Harness()
+        defer { harness.teardown() }
+        stubFullPRFlow(number: 1, updatedAt: "definitely-not-a-date")
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
+        let prs = try await client.fetchAllPRStates(username: "octocat")
+
+        #expect(prs.first?.updatedAt == .distantPast)
     }
 
     @Test
