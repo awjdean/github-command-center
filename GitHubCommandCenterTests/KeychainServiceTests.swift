@@ -110,6 +110,15 @@ struct KeychainServiceTests {
         try? service.deleteToken()
     }
 
+    @Test
+    func baseQuery_includesBackgroundAccessibleAttribute() {
+        let service = makeService()
+        let query = service.baseQuery()
+
+        #expect(query[kSecAttrAccessible] != nil)
+        #expect(KeychainService.tokenAccessibility == kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly)
+    }
+
     private func makeService() -> KeychainService {
         KeychainService(serviceName: uniqueServiceName())
     }
@@ -123,6 +132,7 @@ struct KeychainServiceTests {
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: serviceName,
             kSecAttrAccount: "github-pat",
+            kSecAttrAccessible: KeychainService.tokenAccessibility,
         ]
 
         let deleteStatus = SecItemDelete(query as CFDictionary)

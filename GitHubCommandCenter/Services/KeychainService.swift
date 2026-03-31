@@ -3,6 +3,7 @@ import Security
 
 final class KeychainService: Sendable {
     static let shared = KeychainService()
+    static let tokenAccessibility = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
 
     private let serviceName: String
     private let accountName: String
@@ -12,13 +13,18 @@ final class KeychainService: Sendable {
         self.accountName = accountName
     }
 
-    func saveToken(_ token: String) throws {
-        let data = Data(token.utf8)
-        let query: [CFString: Any] = [
+    func baseQuery() -> [CFString: Any] {
+        [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: serviceName,
             kSecAttrAccount: accountName,
+            kSecAttrAccessible: Self.tokenAccessibility,
         ]
+    }
+
+    func saveToken(_ token: String) throws {
+        let data = Data(token.utf8)
+        let query = baseQuery()
 
         let addQuery = query.merging([kSecValueData: data] as [CFString: Any]) { _, new in new }
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
@@ -37,13 +43,12 @@ final class KeychainService: Sendable {
     }
 
     func loadToken() throws -> String? {
-        let query: [CFString: Any] = [
-            kSecClass: kSecClassGenericPassword,
-            kSecAttrService: serviceName,
-            kSecAttrAccount: accountName,
-            kSecReturnData: true,
-            kSecMatchLimit: kSecMatchLimitOne,
-        ]
+        let query = baseQuery().merging(
+            [
+                kSecReturnData: true,
+                kSecMatchLimit: kSecMatchLimitOne,
+            ] as [CFString: Any]
+        ) { _, new in new }
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -65,11 +70,7 @@ final class KeychainService: Sendable {
     }
 
     func deleteToken() throws {
-        let query: [CFString: Any] = [
-            kSecClass: kSecClassGenericPassword,
-            kSecAttrService: serviceName,
-            kSecAttrAccount: accountName,
-        ]
+        let query = baseQuery()
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.deleteFailed(status: status)
