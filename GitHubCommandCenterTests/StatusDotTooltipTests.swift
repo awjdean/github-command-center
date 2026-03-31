@@ -67,6 +67,16 @@ struct StatusDotTooltipTests {
     }
 
     @Test
+    func ci_failing_noNamedChecks_detail() {
+        let tooltip = StatusDotTooltip(
+            dimension: .ci,
+            pr: .fixture(ciStatus: .failing(checks: [], totalChecks: 4))
+        )
+
+        #expect(tooltip.detail == "Failing (4 total)")
+    }
+
+    @Test
     func ci_pending_detail() {
         let tooltip = StatusDotTooltip(dimension: .ci, pr: .fixture(ciStatus: .pending))
         #expect(tooltip.detail == "Checks in progress")

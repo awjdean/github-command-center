@@ -7,6 +7,16 @@ enum SettingsLinks {
     static let projectRepository = URL(string: "https://github.com/awjdean/github-command-center")
 }
 
+struct TokenSaveFailureOutcome: Equatable {
+    let tokenState: SettingsContentView.TokenState
+    let message: String?
+}
+
+struct TokenSaveSuccessOutcome: Equatable {
+    let tokenState: SettingsContentView.TokenState
+    let warningMessage: String?
+}
+
 struct SettingsContentView: View {
     private static let logger = Logger(subsystem: Log.subsystem, category: "SettingsView")
 
@@ -16,6 +26,8 @@ struct SettingsContentView: View {
     @State private var tokenSaveErrorMessage: String?
     @State private var tokenAccessDetails: TokenAccessDetails?
     @State private var tokenAccessErrorMessage: String?
+    @State private var tokenSaveTask: Task<Void, Never>?
+    @State private var tokenSaveTaskID: UUID?
     @State private var tokenAccessTask: Task<Void, Never>?
     @State private var tokenAccessTaskID: UUID?
     @State private var isValidating = false
@@ -33,16 +45,6 @@ struct SettingsContentView: View {
         case unvalidated
         case valid(username: String)
         case invalid
-    }
-
-    struct TokenSaveFailureOutcome: Equatable {
-        let tokenState: TokenState
-        let message: String?
-    }
-
-    struct TokenSaveSuccessOutcome: Equatable {
-        let tokenState: TokenState
-        let warningMessage: String?
     }
 
     var body: some View {
@@ -68,11 +70,11 @@ struct SettingsContentView: View {
             Label {
                 Text("Authentication")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.textPrimary)
+                    .foregroundColor(Theme.Colors.textPrimary)
             } icon: {
                 Image(systemName: "key.fill")
                     .font(.system(size: 11))
-                    .foregroundColor(.linkBlue)
+                    .foregroundColor(Theme.Colors.linkBlue)
             }
 
             if case .valid(let username) = tokenState {
@@ -89,41 +91,41 @@ struct SettingsContentView: View {
             HStack(spacing: Spacing.md) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 16))
-                    .foregroundColor(.statusGreen)
+                    .foregroundColor(Theme.Colors.statusGreen)
                 VStack(alignment: .leading, spacing: Spacing.micro) {
                     Text("@\(username)")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.textPrimary)
+                        .foregroundColor(Theme.Colors.textPrimary)
                     Text("Token stored in Keychain")
                         .font(.system(size: 10))
-                        .foregroundColor(.textTertiary)
+                        .foregroundColor(Theme.Colors.textTertiary)
                 }
                 Spacer()
             }
             .padding(Spacing.lg)
-            .background(Color.statusGreen.opacity(0.08))
+            .background(Theme.Colors.statusGreen.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.statusGreen.opacity(0.2), lineWidth: 1)
+                    .stroke(Theme.Colors.statusGreen.opacity(0.2), lineWidth: 1)
             )
 
             if let tokenValidationWarningMessage = appState.tokenValidationWarningMessage {
                 HStack(alignment: .top, spacing: Spacing.xs) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 12))
-                        .foregroundColor(.statusYellow)
+                        .foregroundColor(Theme.Colors.statusYellow)
                     Text(tokenValidationWarningMessage)
                         .font(.system(size: 11))
-                        .foregroundColor(.statusYellow)
+                        .foregroundColor(Theme.Colors.statusYellow)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(Spacing.md)
-                .background(Color.statusYellow.opacity(0.08))
+                .background(Theme.Colors.statusYellow.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.statusYellow.opacity(0.2), lineWidth: 1)
+                        .stroke(Theme.Colors.statusYellow.opacity(0.2), lineWidth: 1)
                 )
             }
 
@@ -148,7 +150,7 @@ struct SettingsContentView: View {
             SecureField("ghp_xxxxxxxxxxxxxxxxxxxx", text: $tokenInput)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(.textPrimary)
+                .foregroundColor(Theme.Colors.textPrimary)
                 .padding(Spacing.md)
                 .background(Color.black.opacity(0.25))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -168,10 +170,10 @@ struct SettingsContentView: View {
                 HStack(spacing: Spacing.xs) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 12))
-                        .foregroundColor(.statusRed)
+                        .foregroundColor(Theme.Colors.statusRed)
                     Text("Invalid token \u{2014} check scopes and try again")
                         .font(.system(size: 11))
-                        .foregroundColor(.statusRed)
+                        .foregroundColor(Theme.Colors.statusRed)
                 }
                 .transition(.opacity)
             }
@@ -180,10 +182,10 @@ struct SettingsContentView: View {
                 HStack(spacing: Spacing.xs) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 12))
-                        .foregroundColor(.statusRed)
+                        .foregroundColor(Theme.Colors.statusRed)
                     Text(tokenSaveErrorMessage)
                         .font(.system(size: 11))
-                        .foregroundColor(.statusRed)
+                        .foregroundColor(Theme.Colors.statusRed)
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 .transition(.opacity)
@@ -199,7 +201,7 @@ struct SettingsContentView: View {
                         Text("Manage personal access tokens")
                             .font(.system(size: 11, weight: .medium))
                     }
-                    .foregroundColor(.linkBlue)
+                    .foregroundColor(Theme.Colors.linkBlue)
                 }
             }
 
@@ -219,7 +221,7 @@ struct SettingsContentView: View {
                 }
                 .disabled(tokenInput.isEmpty || isValidating)
                 .buttonStyle(.borderedProminent)
-                .tint(.linkBlue)
+                .tint(Theme.Colors.linkBlue)
 
                 if !tokenInput.isEmpty && !isValidating {
                     Button("Clear") {
@@ -240,7 +242,7 @@ struct SettingsContentView: View {
             Text("APP REQUIREMENTS")
                 .font(.system(size: 9, weight: .bold))
                 .tracking(1.2)
-                .foregroundColor(.textMuted)
+                .foregroundColor(Theme.Colors.textMuted)
 
             scopeRow(
                 scopes: [
@@ -257,7 +259,7 @@ struct SettingsContentView: View {
                     + "This app shows pull requests involving the authenticated account."
             )
             .font(.system(size: 10))
-            .foregroundColor(.textTertiary)
+            .foregroundColor(Theme.Colors.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -278,7 +280,7 @@ struct SettingsContentView: View {
                     .controlSize(.small)
                 Text("Loading token access…")
                     .font(.system(size: 11))
-                    .foregroundColor(.textSecondary)
+                    .foregroundColor(Theme.Colors.textSecondary)
             }
         } else if let tokenAccessDetails {
             VStack(alignment: .leading, spacing: Spacing.lg) {
@@ -288,7 +290,7 @@ struct SettingsContentView: View {
         } else if let tokenAccessErrorMessage {
             Text(tokenAccessErrorMessage)
                 .font(.system(size: 11))
-                .foregroundColor(.statusRed)
+                .foregroundColor(Theme.Colors.statusRed)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -298,7 +300,7 @@ struct SettingsContentView: View {
             Text("REPORTED PERMISSIONS")
                 .font(.system(size: 9, weight: .bold))
                 .tracking(1.2)
-                .foregroundColor(.textMuted)
+                .foregroundColor(Theme.Colors.textMuted)
 
             if details.oauthScopes.isEmpty {
                 Text(
@@ -307,7 +309,7 @@ struct SettingsContentView: View {
                         + "fully introspectable via the REST API."
                 )
                 .font(.system(size: 10))
-                .foregroundColor(.textTertiary)
+                .foregroundColor(Theme.Colors.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             } else {
                 scopeRow(scopes: details.oauthScopes.map { ScopeItem(name: $0) })
@@ -325,16 +327,16 @@ struct SettingsContentView: View {
                 HStack {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(.textMuted)
+                        .foregroundColor(Theme.Colors.textMuted)
                         .rotationEffect(.degrees(isReposExpanded ? 90 : 0))
                     Text("ACCESSIBLE REPOSITORIES")
                         .font(.system(size: 9, weight: .bold))
                         .tracking(1.2)
-                        .foregroundColor(.textMuted)
+                        .foregroundColor(Theme.Colors.textMuted)
                     Spacer()
                     Text("\(details.accessibleRepositories.count)")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundColor(.textTertiary)
+                        .foregroundColor(Theme.Colors.textTertiary)
                 }
                 .contentShape(Rectangle())
             }
@@ -344,7 +346,7 @@ struct SettingsContentView: View {
                 if details.accessibleRepositories.isEmpty {
                     Text("No accessible repositories were returned for this token.")
                         .font(.system(size: 10))
-                        .foregroundColor(.textTertiary)
+                        .foregroundColor(Theme.Colors.textTertiary)
                 } else {
                     VStack(spacing: Spacing.xs) {
                         ForEach(details.accessibleRepositories) { repository in
@@ -360,7 +362,7 @@ struct SettingsContentView: View {
         HStack(alignment: .firstTextBaseline, spacing: Spacing.sm) {
             Text(repository.fullName)
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(.textSecondary)
+                .foregroundColor(Theme.Colors.textSecondary)
                 .lineLimit(1)
 
             Spacer(minLength: Spacing.sm)
@@ -378,11 +380,11 @@ struct SettingsContentView: View {
     private func accessLevelColor(_ accessLevel: TokenAccessDetails.AccessibleRepository.AccessLevel) -> Color {
         switch accessLevel {
         case .admin:
-            .statusRed
+            Theme.Colors.statusRed
         case .write:
-            .statusYellow
+            Theme.Colors.statusYellow
         case .read:
-            .statusGreen
+            Theme.Colors.statusGreen
         }
     }
 
@@ -393,17 +395,17 @@ struct SettingsContentView: View {
             if optional {
                 Text("optional")
                     .font(.system(size: 8))
-                    .foregroundColor(.textMuted)
+                    .foregroundColor(Theme.Colors.textMuted)
             }
         }
-        .foregroundColor(optional ? .textTertiary : .textSecondary)
+        .foregroundColor(optional ? Theme.Colors.textTertiary : Theme.Colors.textSecondary)
         .padding(.horizontal, 7)
         .padding(.vertical, Spacing.xxxs)
-        .background(Color.panelBackground.opacity(0.8))
+        .background(Theme.Colors.panelBackground.opacity(0.8))
         .clipShape(RoundedRectangle(cornerRadius: Spacing.xxs))
         .overlay(
             RoundedRectangle(cornerRadius: Spacing.xxs)
-                .stroke(Color.textMuted.opacity(0.25), lineWidth: 0.5)
+                .stroke(Theme.Colors.textMuted.opacity(0.25), lineWidth: 0.5)
         )
     }
 
@@ -413,7 +415,7 @@ struct SettingsContentView: View {
         HStack {
             Toggle("Launch at Login", isOn: $launchAtLogin)
                 .font(.system(size: 12))
-                .foregroundColor(.textSecondary)
+                .foregroundColor(Theme.Colors.textSecondary)
                 .toggleStyle(.checkbox)
                 .onChange(of: launchAtLogin) { _, enabled in
                     do {
@@ -438,7 +440,7 @@ struct SettingsContentView: View {
                 NSApplication.shared.terminate(nil)
             }
             .font(.system(size: 12, weight: .medium))
-            .foregroundColor(.textSecondary)
+            .foregroundColor(Theme.Colors.textSecondary)
             .buttonStyle(.bordered)
         }
         .settingsCard()
@@ -449,18 +451,18 @@ struct SettingsContentView: View {
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Text("GitHub Command Center")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.textPrimary)
+                    .foregroundColor(Theme.Colors.textPrimary)
                 HStack(spacing: Spacing.sm) {
                     Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0")")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundColor(.textTertiary)
+                        .foregroundColor(Theme.Colors.textTertiary)
                         .padding(.horizontal, Spacing.xs)
                         .padding(.vertical, Spacing.micro)
-                        .background(Color.panelBackground.opacity(0.8))
+                        .background(Theme.Colors.panelBackground.opacity(0.8))
                         .clipShape(RoundedRectangle(cornerRadius: Spacing.xxs))
                     Text("MIT License")
                         .font(.system(size: 11))
-                        .foregroundColor(.textTertiary)
+                        .foregroundColor(Theme.Colors.textTertiary)
                 }
             }
             Spacer()
@@ -472,7 +474,7 @@ struct SettingsContentView: View {
                         Text("View on GitHub")
                             .font(.system(size: 11, weight: .medium))
                     }
-                    .foregroundColor(.linkBlue)
+                    .foregroundColor(Theme.Colors.linkBlue)
                 }
             }
         }
@@ -481,9 +483,9 @@ struct SettingsContentView: View {
 
     private var tokenBorderColor: Color {
         switch tokenState {
-        case .empty, .unvalidated: Color.textMuted.opacity(0.25)
-        case .valid: .statusGreen.opacity(0.6)
-        case .invalid: .statusRed.opacity(0.6)
+        case .empty, .unvalidated: Theme.Colors.textMuted.opacity(0.25)
+        case .valid: Theme.Colors.statusGreen.opacity(0.6)
+        case .invalid: Theme.Colors.statusRed.opacity(0.6)
         }
     }
 
@@ -511,37 +513,53 @@ struct SettingsContentView: View {
     private func saveToken() {
         guard !tokenInput.isEmpty else { return }
         let tokenToSave = tokenInput
+        tokenSaveTask?.cancel()
+        let taskID = UUID()
+        tokenSaveTaskID = taskID
         isValidating = true
 
-        Task { @MainActor in
+        tokenSaveTask = Task { @MainActor in
+            defer {
+                if tokenSaveTaskID == taskID {
+                    isValidating = false
+                    tokenSaveTask = nil
+                    tokenSaveTaskID = nil
+                }
+            }
+
             do {
                 clearTokenSaveValidationState()
                 let client = GitHubRESTClient(token: tokenToSave)
                 let validationResult = try await client.validateTokenForAppAccess()
-                guard tokenInput == tokenToSave else {
-                    isValidating = false
-                    return
-                }
+                guard !Task.isCancelled, tokenInput == tokenToSave else { return }
                 let successOutcome = Self.tokenSaveSuccessOutcome(for: validationResult)
+                guard !Task.isCancelled else { return }
                 try KeychainService.shared.saveToken(tokenToSave)
+                guard !Task.isCancelled, tokenInput == tokenToSave else { return }
                 withAnimation(.easeInOut(duration: 0.2)) {
                     tokenState = successOutcome.tokenState
                 }
                 appState.tokenValidationWarningMessage = successOutcome.warningMessage
                 refreshTokenAccessDetails(using: tokenToSave)
                 appState.resetPolling()
+            } catch is CancellationError {
+                return
             } catch {
+                guard !Task.isCancelled else { return }
                 let outcome = Self.tokenSaveFailureOutcome(for: error)
                 withAnimation(.easeInOut(duration: 0.2)) {
                     tokenState = outcome.tokenState
                 }
                 tokenSaveErrorMessage = outcome.message
             }
-            isValidating = false
         }
     }
 
     private func clearToken() {
+        tokenSaveTask?.cancel()
+        tokenSaveTask = nil
+        tokenSaveTaskID = nil
+        isValidating = false
         clearTokenAccessState()
         do {
             try KeychainService.shared.deleteToken()
@@ -658,7 +676,7 @@ struct SettingsContentView: View {
     SettingsContentView()
         .environment(settingsPreviewAppState())
         .frame(width: 360)
-        .background(Color.panelBackground)
+        .background(Theme.Colors.panelBackground)
 }
 
 @MainActor

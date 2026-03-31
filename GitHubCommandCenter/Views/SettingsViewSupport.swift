@@ -10,7 +10,7 @@ private struct SettingsCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(Spacing.xl)
-            .background(Color.panelSurface)
+            .background(Theme.Colors.panelSurface)
             .clipShape(RoundedRectangle(cornerRadius: Spacing.lg))
     }
 }
@@ -25,16 +25,16 @@ struct FlowLayout: Layout {
     var spacing: CGFloat = Spacing.xxs
 
     struct Cache {
-        var size: CGSize
-        var positions: [CGPoint]
+        var size: CGSize = .zero
+        var positions: [CGPoint] = []
     }
 
     func makeCache(subviews: Subviews) -> Cache {
-        arrange(in: .infinity, subviews: subviews)
+        Cache()
     }
 
     func updateCache(_ cache: inout Cache, subviews: Subviews) {
-        cache = arrange(in: .infinity, subviews: subviews)
+        cache = Cache()
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {

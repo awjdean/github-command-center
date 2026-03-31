@@ -42,7 +42,7 @@ struct PRListView: View {
             footerView
         }
         .frame(width: PanelMode.width)
-        .background(Color.panelBackground)
+        .background(Theme.Colors.panelBackground)
         .animation(.easeInOut(duration: 0.2), value: panelMode)
         .onAppear {
             appState.startPollingIfNeeded()
@@ -59,7 +59,7 @@ struct PRListView: View {
                 } label: {
                     Image(systemName: "chevron.left")
                         .imageScale(.small)
-                        .foregroundColor(.textTertiary)
+                        .foregroundColor(Theme.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
                 .help("Back")
@@ -68,7 +68,7 @@ struct PRListView: View {
             VStack(alignment: .leading, spacing: Spacing.hairline) {
                 Text(panelMode.headerTitle)
                     .font(.panelTitle)
-                    .foregroundColor(.textPrimary)
+                    .foregroundColor(Theme.Colors.textPrimary)
                 panelSubtitleView
             }
             Spacer()
@@ -79,7 +79,7 @@ struct PRListView: View {
                 } label: {
                     Image(systemName: "gear")
                         .imageScale(.medium)
-                        .foregroundColor(.textTertiary)
+                        .foregroundColor(Theme.Colors.textTertiary)
                 }
                 .buttonStyle(.plain)
                 .help("Settings")
@@ -103,16 +103,16 @@ struct PRListView: View {
         let actionCount = appState.menuBarBadgeCount
         if panelMode == .pullRequests && actionCount > 0 {
             (Text(panelSubtitle)
-                .foregroundColor(.textTertiary)
+                .foregroundColor(Theme.Colors.textTertiary)
                 + Text("  ·  ")
-                .foregroundColor(.textMuted)
+                .foregroundColor(Theme.Colors.textMuted)
                 + Text("\(actionCount) need attention")
-                .foregroundColor(.statusYellow))
+                .foregroundColor(Theme.Colors.statusYellow))
                 .font(.panelSubtitle)
         } else if !panelSubtitle.isEmpty {
             Text(panelSubtitle)
                 .font(.panelSubtitle)
-                .foregroundColor(.textTertiary)
+                .foregroundColor(Theme.Colors.textTertiary)
         }
     }
 
@@ -125,12 +125,12 @@ struct PRListView: View {
                         + (appState.rateLimitResetDate.map {
                             " — resets \(Self.relativeDateFormatter.localizedString(for: $0, relativeTo: Date()))"
                         } ?? ""),
-                    color: .statusRed
+                    color: Theme.Colors.statusRed
                 )
             } else if appState.isStale {
                 warningBar(
                     text: "Data may be outdated — last update \(formattedLastUpdated)",
-                    color: .statusYellow
+                    color: Theme.Colors.statusYellow
                 )
             }
 
@@ -214,7 +214,7 @@ struct PRListView: View {
         Text(title)
             .font(.sectionLabel)
             .tracking(1)
-            .foregroundColor(.textMuted)
+            .foregroundColor(Theme.Colors.textMuted)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Spacing.xl)
             .padding(.top, Spacing.md)
@@ -238,14 +238,14 @@ struct PRListView: View {
         VStack(spacing: Spacing.sm) {
             Image(systemName: "checkmark.circle")
                 .font(.system(size: 28))
-                .foregroundColor(.statusGreen)
+                .foregroundColor(Theme.Colors.statusGreen)
             Text("No tracked pull requests right now.")
                 .font(.prTitle)
-                .foregroundColor(.textSecondary)
+                .foregroundColor(Theme.Colors.textSecondary)
             if let emptyStateMessage = appState.emptyStateMessage {
                 Text(emptyStateMessage)
                     .font(.footerText)
-                    .foregroundColor(.textTertiary)
+                    .foregroundColor(Theme.Colors.textTertiary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, Spacing.xxl)
             }
@@ -258,10 +258,10 @@ struct PRListView: View {
         VStack(spacing: Spacing.sm) {
             Image(systemName: "key.fill")
                 .font(.system(size: 28))
-                .foregroundColor(.statusYellow)
+                .foregroundColor(Theme.Colors.statusYellow)
             Text("Add a GitHub token in Settings to start tracking pull requests.")
                 .font(.prTitle)
-                .foregroundColor(.textSecondary)
+                .foregroundColor(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -273,10 +273,10 @@ struct PRListView: View {
         VStack(spacing: Spacing.sm) {
             Image(systemName: "exclamationmark.circle")
                 .font(.system(size: 28))
-                .foregroundColor(.statusRed)
+                .foregroundColor(Theme.Colors.statusRed)
             Text("Update your GitHub token in Settings to resume tracking pull requests.")
                 .font(.prTitle)
-                .foregroundColor(.textSecondary)
+                .foregroundColor(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -288,10 +288,10 @@ struct PRListView: View {
         VStack(spacing: Spacing.md) {
             Image(systemName: "wifi.exclamationmark")
                 .font(.system(size: 28))
-                .foregroundColor(.statusRed)
+                .foregroundColor(Theme.Colors.statusRed)
             Text(appState.error?.errorDescription ?? "Unable to load pull requests right now.")
                 .font(.prTitle)
-                .foregroundColor(.textSecondary)
+                .foregroundColor(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
             Button("Retry") {
                 appState.forceRefresh()
@@ -310,7 +310,7 @@ struct PRListView: View {
             icon: "exclamationmark.circle.fill",
             text: "Authentication failed",
             buttonLabel: "Fix",
-            color: .statusRed
+            color: Theme.Colors.statusRed
         )
     }
 
@@ -319,7 +319,7 @@ struct PRListView: View {
             icon: "key.fill",
             text: "Add a GitHub token to get started",
             buttonLabel: "Add token",
-            color: .statusYellow
+            color: Theme.Colors.statusYellow
         )
     }
 
@@ -329,14 +329,14 @@ struct PRListView: View {
                 .foregroundColor(color)
             Text(text)
                 .font(.footerText)
-                .foregroundColor(.textSecondary)
+                .foregroundColor(Theme.Colors.textSecondary)
             Spacer()
             Button {
                 panelMode = .settings
             } label: {
                 Text(buttonLabel)
                     .font(.footerText)
-                    .foregroundColor(.linkBlue)
+                    .foregroundColor(Theme.Colors.linkBlue)
             }
             .buttonStyle(.plain)
         }
@@ -352,7 +352,7 @@ struct PRListView: View {
                 .foregroundColor(color)
             Text(text)
                 .font(.footerText)
-                .foregroundColor(.textSecondary)
+                .foregroundColor(Theme.Colors.textSecondary)
             Spacer()
         }
         .padding(.horizontal, Spacing.xl)
@@ -372,11 +372,11 @@ struct PRListView: View {
                     if appState.lastUpdated != nil {
                         Text("Updated \(formattedLastUpdated)")
                             .font(.footerText)
-                            .foregroundColor(.textMuted)
+                            .foregroundColor(Theme.Colors.textMuted)
                     } else {
                         Text(appState.isLoading ? "Loading…" : "Never updated")
                             .font(.footerText)
-                            .foregroundColor(.textMuted)
+                            .foregroundColor(Theme.Colors.textMuted)
                     }
 
                     Spacer()
@@ -386,7 +386,7 @@ struct PRListView: View {
                     } label: {
                         Image(systemName: "arrow.clockwise")
                             .imageScale(.small)
-                            .foregroundColor(.textTertiary)
+                            .foregroundColor(Theme.Colors.textTertiary)
                     }
                     .buttonStyle(.plain)
                     .help("Refresh (⌘R)")
@@ -407,7 +407,7 @@ struct PRListView: View {
     }()
 
     private func themedDivider() -> some View {
-        Divider().background(Color.textMuted.opacity(0.2))
+        Divider().background(Theme.Colors.textMuted.opacity(0.2))
     }
 
     private var formattedLastUpdated: String {
@@ -538,7 +538,7 @@ private struct SkeletonRowView: View {
     }
 
     private var shimmerColor: Color {
-        Color.panelSurface.opacity(0.8)
+        Theme.Colors.panelSurface.opacity(0.8)
     }
 
     private var shimmerSweep: some View {

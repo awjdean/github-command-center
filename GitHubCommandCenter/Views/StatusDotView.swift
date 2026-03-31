@@ -62,28 +62,28 @@ struct StatusDotView: View {
 
     private var ciColor: Color {
         switch pr.ciStatus {
-        case .passing: return .statusGreen
-        case .failing: return .statusRed
-        case .pending: return .statusYellow
-        case .none: return .statusGray
+        case .passing: return Theme.Colors.statusGreen
+        case .failing: return Theme.Colors.statusRed
+        case .pending: return Theme.Colors.statusYellow
+        case .none: return Theme.Colors.statusGray
         }
     }
 
     private var reviewColor: Color {
         switch pr.reviewStatus {
-        case .approved: return .statusGreen
-        case .changesRequested: return .statusRed
-        case .requested: return .statusYellow
-        case .none: return .statusGray
+        case .approved: return Theme.Colors.statusGreen
+        case .changesRequested: return Theme.Colors.statusRed
+        case .requested: return Theme.Colors.statusYellow
+        case .none: return Theme.Colors.statusGray
         }
     }
 
     private var mergeColor: Color {
         switch pr.mergeStatus {
-        case .ready: return .statusGreen
-        case .conflicts: return .statusRed
-        case .behind, .blocked: return .statusYellow
-        case .pending: return .statusGray
+        case .ready: return Theme.Colors.statusGreen
+        case .conflicts: return Theme.Colors.statusRed
+        case .behind, .blocked: return Theme.Colors.statusYellow
+        case .pending: return Theme.Colors.statusGray
         }
     }
 
@@ -173,6 +173,9 @@ struct StatusDotTooltip {
                 return "All checks passing"
             case .failing(let checks, let total):
                 let names = checks.map(\.name)
+                guard !names.isEmpty else {
+                    return "Failing (\(total) total)"
+                }
                 let display = names.prefix(2).joined(separator: ", ")
                 let more = names.count > 2 ? " (+\(names.count - 2) more)" : ""
                 return "\(display)\(more) failing (\(total) total)"
@@ -221,13 +224,13 @@ private struct CIFailingPopoverView: View {
             Text("CI")
                 .font(.sectionLabel)
                 .tracking(0.5)
-                .foregroundColor(.textTertiary)
+                .foregroundColor(Theme.Colors.textTertiary)
 
             Text("\(checks.count) of \(totalChecks) checks failing")
                 .font(.footerText)
-                .foregroundColor(.textSecondary)
+                .foregroundColor(Theme.Colors.textSecondary)
 
-            Divider().background(Color.textMuted.opacity(0.3))
+            Divider().background(Theme.Colors.textMuted.opacity(0.3))
 
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -246,7 +249,7 @@ private struct CIFailingPopoverView: View {
     private func failingCheckRow(_ check: PRState.FailingCheck) -> some View {
         HStack(spacing: Spacing.xs) {
             Circle()
-                .fill(Color.statusRed)
+                .fill(Theme.Colors.statusRed)
                 .frame(width: 6, height: 6)
 
             VStack(alignment: .leading, spacing: Spacing.hairline) {
@@ -256,7 +259,7 @@ private struct CIFailingPopoverView: View {
                     } label: {
                         Text(check.name)
                             .font(.tooltipDetail)
-                            .foregroundColor(.linkBlue)
+                            .foregroundColor(Theme.Colors.linkBlue)
                             .underline()
                             .lineLimit(1)
                     }
@@ -264,13 +267,13 @@ private struct CIFailingPopoverView: View {
                 } else {
                     Text(check.name)
                         .font(.tooltipDetail)
-                        .foregroundColor(.textSecondary)
+                        .foregroundColor(Theme.Colors.textSecondary)
                         .lineLimit(1)
                 }
 
                 Text(conclusionLabel(check.conclusion))
                     .font(.tooltipLabel)
-                    .foregroundColor(.textMuted)
+                    .foregroundColor(Theme.Colors.textMuted)
             }
 
             Spacer()
@@ -299,13 +302,84 @@ private struct StatusPopoverView: View {
             Text(label)
                 .font(.sectionLabel)
                 .tracking(0.5)
-                .foregroundColor(.textTertiary)
+                .foregroundColor(Theme.Colors.textTertiary)
             Text(detail)
                 .font(.footerText)
-                .foregroundColor(.textSecondary)
+                .foregroundColor(Theme.Colors.textSecondary)
         }
         .padding(.horizontal, Spacing.md)
         .padding(.vertical, Spacing.sm)
         .fixedSize()
     }
+}
+
+#Preview("CI Passing") {
+    StatusDotView(dimension: .ci, pr: statusDotPreviewPR(ciStatus: .passing))
+        .padding()
+        .background(Theme.Colors.panelBackground)
+}
+
+#Preview("CI Failing") {
+    StatusDotView(
+        dimension: .ci,
+        pr: statusDotPreviewPR(
+            ciStatus: .failing(
+                checks: [
+                    .init(name: "lint", conclusion: "failure", url: nil),
+                    .init(
+                        name: "unit-tests",
+                        conclusion: "failure",
+                        url: statusDotPreviewURL(
+                            "https://github.com/awjdean/github-command-center/actions/runs/1"
+                        ),
+                    ),
+                ],
+                totalChecks: 4
+            )
+        )
+    )
+    .padding()
+    .background(Theme.Colors.panelBackground)
+}
+
+#Preview("Review Requested") {
+    StatusDotView(
+        dimension: .review,
+        pr: statusDotPreviewPR(reviewStatus: .requested(by: ["octocat"]))
+    )
+    .padding()
+    .background(Theme.Colors.panelBackground)
+}
+
+#Preview("Merge Conflicts") {
+    StatusDotView(dimension: .merge, pr: statusDotPreviewPR(mergeStatus: .conflicts))
+        .padding()
+        .background(Theme.Colors.panelBackground)
+}
+
+private func statusDotPreviewPR(
+    ciStatus: PRState.CIStatus = .passing,
+    reviewStatus: PRState.ReviewStatus = .none,
+    mergeStatus: PRState.MergeStatus = .ready
+) -> PRState {
+    PRState(
+        number: 42,
+        title: "Refine PR status previews",
+        repoFullName: "awjdean/github-command-center",
+        url: statusDotPreviewURL("https://github.com/awjdean/github-command-center/pull/42"),
+        headSHA: "abc123def456",
+        draftStatus: .ready,
+        ciStatus: ciStatus,
+        reviewStatus: reviewStatus,
+        mergeStatus: mergeStatus,
+        assignment: .init(createdByMe: true, reviewRequestedFromMe: false, assignedToMe: false),
+        updatedAt: .now
+    )
+}
+
+private func statusDotPreviewURL(_ string: String) -> URL {
+    guard let url = URL(string: string) else {
+        preconditionFailure("Invalid StatusDotView preview URL: \(string)")
+    }
+    return url
 }

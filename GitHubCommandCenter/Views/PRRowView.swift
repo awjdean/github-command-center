@@ -18,7 +18,7 @@ struct PRRowView: View {
                     } label: {
                         Text("#\(pr.number)")
                             .font(.prNumber)
-                            .foregroundColor(.linkBlue)
+                            .foregroundColor(Theme.Colors.linkBlue)
                             .underline()
                     }
                     .buttonStyle(.plain)
@@ -26,10 +26,10 @@ struct PRRowView: View {
                     if !pr.displayRole.isEmpty {
                         Text(pr.displayRole)
                             .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(.textMuted)
+                            .foregroundColor(Theme.Colors.textMuted)
                             .padding(.horizontal, Spacing.xxs)
                             .padding(.vertical, 1)
-                            .background(Color.panelSurface)
+                            .background(Theme.Colors.panelSurface)
                             .cornerRadius(Spacing.xxxs)
                     }
 
@@ -38,26 +38,26 @@ struct PRRowView: View {
                     if pr.draftStatus == .draft {
                         Text("DRAFT")
                             .font(.system(size: 8, weight: .semibold))
-                            .foregroundColor(.textMuted)
+                            .foregroundColor(Theme.Colors.textMuted)
                             .padding(.horizontal, Spacing.xxxs)
                             .padding(.vertical, 1)
                             .overlay(
                                 RoundedRectangle(cornerRadius: Spacing.xxxs)
-                                    .stroke(Color.textMuted.opacity(0.5), lineWidth: 0.5)
+                                    .stroke(Theme.Colors.textMuted.opacity(0.5), lineWidth: 0.5)
                             )
                     }
                 }
 
                 Text(pr.title)
                     .font(.prTitle)
-                    .foregroundColor(.textSecondary)
+                    .foregroundColor(Theme.Colors.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
 
                 HStack(spacing: Spacing.xs) {
                     Text(pr.repoFullName)
                         .font(.prRepo)
-                        .foregroundColor(.textMuted)
+                        .foregroundColor(Theme.Colors.textMuted)
 
                     Spacer()
 
@@ -71,7 +71,7 @@ struct PRRowView: View {
         }
         .padding(.horizontal, Spacing.xl)
         .padding(.vertical, Spacing.sm)
-        .background(isHovered ? Color.panelSurface : Color.clear)
+        .background(isHovered ? Theme.Colors.panelSurface : Color.clear)
         .contentShape(Rectangle())
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.1)) { isHovered = hovering }
