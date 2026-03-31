@@ -94,7 +94,7 @@ struct PRListView: View {
         case .pullRequests:
             appState.panelSubtitleText
         case .settings:
-            "Authentication & app settings"
+            ""
         }
     }
 
@@ -109,7 +109,7 @@ struct PRListView: View {
                 + Text("\(actionCount) need attention")
                 .foregroundColor(.statusYellow))
                 .font(.panelSubtitle)
-        } else {
+        } else if !panelSubtitle.isEmpty {
             Text(panelSubtitle)
                 .font(.panelSubtitle)
                 .foregroundColor(.textTertiary)
@@ -174,7 +174,7 @@ struct PRListView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxHeight: 400)
+        .frame(maxHeight: panelMode == .settings ? 500 : 400)
     }
 
     // MARK: - PR sections

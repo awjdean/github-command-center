@@ -15,6 +15,7 @@ struct SettingsContentView: View {
     @State private var tokenAccessTask: Task<Void, Never>?
     @State private var isValidating = false
     @State private var isLoadingTokenAccess = false
+    @State private var isReposExpanded = false
     @State private var launchAtLogin = false
     let showsAppControls: Bool
 
@@ -32,10 +33,10 @@ struct SettingsContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             tokenSection
+            aboutSection
             if showsAppControls {
                 appControlsSection
             }
-            aboutSection
         }
         .padding(24)
         .preferredColorScheme(.dark)
@@ -266,25 +267,39 @@ struct SettingsContentView: View {
 
     private func accessibleRepositoriesSection(details: TokenAccessDetails) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("ACCESSIBLE REPOSITORIES")
-                    .font(.system(size: 9, weight: .bold))
-                    .tracking(1.2)
-                    .foregroundColor(.textMuted)
-                Spacer()
-                Text("\(details.accessibleRepositories.count)")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundColor(.textTertiary)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isReposExpanded.toggle()
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.textMuted)
+                        .rotationEffect(.degrees(isReposExpanded ? 90 : 0))
+                    Text("ACCESSIBLE REPOSITORIES")
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(1.2)
+                        .foregroundColor(.textMuted)
+                    Spacer()
+                    Text("\(details.accessibleRepositories.count)")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundColor(.textTertiary)
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
 
-            if details.accessibleRepositories.isEmpty {
-                Text("No accessible repositories were returned for this token.")
-                    .font(.system(size: 10))
-                    .foregroundColor(.textTertiary)
-            } else {
-                VStack(spacing: 6) {
-                    ForEach(details.accessibleRepositories) { repository in
-                        accessibleRepositoryRow(repository)
+            if isReposExpanded {
+                if details.accessibleRepositories.isEmpty {
+                    Text("No accessible repositories were returned for this token.")
+                        .font(.system(size: 10))
+                        .foregroundColor(.textTertiary)
+                } else {
+                    VStack(spacing: 6) {
+                        ForEach(details.accessibleRepositories) { repository in
+                            accessibleRepositoryRow(repository)
+                        }
                     }
                 }
             }
@@ -345,17 +360,7 @@ struct SettingsContentView: View {
     // MARK: - App Controls
 
     private var appControlsSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label {
-                Text("Application")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.textPrimary)
-            } icon: {
-                Image(systemName: "switch.2")
-                    .font(.system(size: 11))
-                    .foregroundColor(.linkBlue)
-            }
-
+        HStack {
             Toggle("Launch at Login", isOn: $launchAtLogin)
                 .font(.system(size: 12))
                 .foregroundColor(.textSecondary)
@@ -371,6 +376,8 @@ struct SettingsContentView: View {
                         launchAtLogin = (SMAppService.mainApp.status == .enabled)
                     }
                 }
+
+            Spacer()
 
             Button("Quit") {
                 NSApplication.shared.terminate(nil)
