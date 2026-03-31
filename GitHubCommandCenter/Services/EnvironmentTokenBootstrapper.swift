@@ -1,6 +1,8 @@
 import Foundation
+import OSLog
 
 struct EnvironmentTokenBootstrapper {
+    private static let logger = Logger(subsystem: Log.subsystem, category: "EnvironmentTokenBootstrapper")
     private let keychain: KeychainService
     private let environment: [String: String]
     private let searchRoots: [URL]
@@ -33,6 +35,10 @@ struct EnvironmentTokenBootstrapper {
             try keychain.saveToken(preload.token)
             return true
         } catch {
+            let errorDescription = error.localizedDescription
+            Self.logger.error(
+                "Error preloading environment tokens: \(errorDescription, privacy: .public)"
+            )
             return false
         }
     }
@@ -193,6 +199,7 @@ struct EnvironmentTokenBootstrapper {
             token.append(character)
         }
 
+        // Empty quoted values should behave like an unset token rather than clearing a valid stored token.
         guard foundClosingQuote, !token.isEmpty else {
             return nil
         }
