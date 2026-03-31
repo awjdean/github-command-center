@@ -85,13 +85,13 @@ struct PRRowView: View {
     }
 
     private func openPullRequest() {
-        guard NSWorkspace.shared.open(pr.url) else {
-            Self.logger.error(
-                "Failed to open PR URL for \(pr.id, privacy: .public): \(pr.url.absoluteString, privacy: .public)"
-            )
-            openErrorMessage = PRRowPresentation.openFailureMessage(for: pr)
+        if let failureMessage = ExternalURLPresentation.open(
+            pr.url,
+            logger: Self.logger,
+            failureMessage: PRRowPresentation.openFailureMessage(for: pr)
+        ) {
+            openErrorMessage = failureMessage
             isShowingOpenError = true
-            return
         }
     }
 }
@@ -152,4 +152,73 @@ enum PRRowPresentation {
             return "pending"
         }
     }
+}
+
+enum ExternalURLPresentation {
+    static func open(
+        _ url: URL,
+        logger: Logger,
+        failureMessage: @autoclosure () -> String
+    ) -> String? {
+        guard NSWorkspace.shared.open(url) else {
+            logger.error("Failed to open external URL: \(url.absoluteString, privacy: .public)")
+            return failureMessage()
+        }
+
+        return nil
+    }
+}
+
+#Preview("PR Row - Needs Action") {
+    PRRowView(
+        pr: prRowPreviewPR(
+            number: 42,
+            title: "Stabilize review queue ordering",
+            repoFullName: "openai/github-command-center",
+            ciStatus: .failing(
+                checks: [.init(name: "Unit Tests", conclusion: "failure", url: URL(string: "https://github.com"))],
+                totalChecks: 6
+            ),
+            reviewStatus: .changesRequested(by: ["alice"]),
+            createdByMe: true
+        )
+    )
+    .padding()
+    .background(Theme.Colors.panelBackground)
+}
+
+private func prRowPreviewPR(
+    number: Int,
+    title: String,
+    repoFullName: String,
+    draftStatus: PRState.DraftStatus = .ready,
+    ciStatus: PRState.CIStatus = .passing,
+    reviewStatus: PRState.ReviewStatus = .none,
+    mergeStatus: PRState.MergeStatus = .ready,
+    createdByMe: Bool = false,
+    reviewRequestedFromMe: Bool = false,
+    assignedToMe: Bool = false,
+    updatedAt: Date = Date()
+) -> PRState {
+    guard let pullRequestURL = URL(string: "https://github.com/\(repoFullName)/pull/\(number)") else {
+        preconditionFailure("Invalid PR row preview URL for \(repoFullName)#\(number)")
+    }
+
+    return PRState(
+        number: number,
+        title: title,
+        repoFullName: repoFullName,
+        url: pullRequestURL,
+        headSHA: "abc123def456",
+        draftStatus: draftStatus,
+        ciStatus: ciStatus,
+        reviewStatus: reviewStatus,
+        mergeStatus: mergeStatus,
+        assignment: .init(
+            createdByMe: createdByMe,
+            reviewRequestedFromMe: reviewRequestedFromMe,
+            assignedToMe: assignedToMe
+        ),
+        updatedAt: updatedAt
+    )
 }

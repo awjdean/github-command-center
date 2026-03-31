@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 
 enum StatusDimension {
@@ -216,8 +217,12 @@ struct StatusDotTooltip {
 // MARK: - Popover content
 
 private struct CIFailingPopoverView: View {
+    private static let logger = Logger(subsystem: Log.subsystem, category: "StatusDotView")
+
     let checks: [PRState.FailingCheck]
     let totalChecks: Int
+    @State private var isShowingOpenError = false
+    @State private var openErrorMessage = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
@@ -244,6 +249,11 @@ private struct CIFailingPopoverView: View {
         .padding(.horizontal, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.md)
         .frame(maxWidth: 320)
+        .alert("Unable to Open Pull Request", isPresented: $isShowingOpenError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(openErrorMessage)
+        }
     }
 
     private func failingCheckRow(_ check: PRState.FailingCheck) -> some View {
@@ -255,7 +265,17 @@ private struct CIFailingPopoverView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 if let url = check.url {
                     Button {
-                        NSWorkspace.shared.open(url)
+                        let failureMessage =
+                            "GitHub Command Center couldn't open CI link \"\(check.name)\". "
+                            + "URL: \(url.absoluteString)"
+                        if let failureMessage = ExternalURLPresentation.open(
+                            url,
+                            logger: Self.logger,
+                            failureMessage: failureMessage
+                        ) {
+                            openErrorMessage = failureMessage
+                            isShowingOpenError = true
+                        }
                     } label: {
                         Text(check.name)
                             .font(Theme.Fonts.tooltipDetail)

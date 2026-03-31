@@ -26,6 +26,13 @@ enum PanelMode {
     }
 }
 
+private enum RowOpacity {
+    static let active = 1.0
+    static let waiting = 0.55
+    static let draft = 0.5
+    static let recentlyClosed = 0.5
+}
+
 struct PRListView: View {
     @Environment(AppState.self) private var appState
     @State private var panelMode: PanelMode
@@ -171,7 +178,7 @@ struct PRListView: View {
                     if appState.showsRecentlyClosedSection {
                         sectionHeader("RECENTLY CLOSED")
                         ForEach(appState.recentlyClosedPRs) { pr in
-                            PRRowView(pr: pr).opacity(0.5)
+                            PRRowView(pr: pr).opacity(RowOpacity.recentlyClosed)
                             themedDivider()
                         }
                     }
@@ -195,7 +202,7 @@ struct PRListView: View {
         if !needsAction.isEmpty {
             sectionHeader("NEEDS YOUR ACTION")
             ForEach(needsAction) { pr in
-                PRRowView(pr: pr)
+                PRRowView(pr: pr).opacity(RowOpacity.active)
                 themedDivider()
             }
         }
@@ -203,7 +210,7 @@ struct PRListView: View {
         if !waiting.isEmpty {
             sectionHeader("WAITING ON OTHERS")
             ForEach(waiting) { pr in
-                PRRowView(pr: pr).opacity(0.55)
+                PRRowView(pr: pr).opacity(RowOpacity.waiting)
                 themedDivider()
             }
         }
@@ -211,7 +218,7 @@ struct PRListView: View {
         if !drafts.isEmpty {
             sectionHeader("YOUR DRAFT PRs")
             ForEach(drafts) { pr in
-                PRRowView(pr: pr).opacity(0.5)
+                PRRowView(pr: pr).opacity(RowOpacity.draft)
                 themedDivider()
             }
         }
