@@ -61,6 +61,10 @@ final class AppState: ObservableObject {
         cachedWaitingOnOthersPRs
     }
 
+    var yourDraftPRs: [PRState] {
+        cachedYourDraftPRs
+    }
+
     var menuBarBadgeCount: Int {
         needsActionPRs.count
     }
@@ -120,6 +124,7 @@ final class AppState: ObservableObject {
     private let preloadTokenIfNeeded: () -> Void
     private var cachedNeedsActionPRs: [PRState] = []
     private var cachedWaitingOnOthersPRs: [PRState] = []
+    private var cachedYourDraftPRs: [PRState] = []
 
     init() {
         self.makePollingEngine = { PollingEngine(appState: $0) }
@@ -157,6 +162,10 @@ final class AppState: ObservableObject {
         cachedWaitingOnOthersPRs =
             prs
             .filter { $0.triageCategory == .waitingOnOthers }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        cachedYourDraftPRs =
+            prs
+            .filter { $0.triageCategory == .yourDraft }
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 

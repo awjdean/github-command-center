@@ -85,8 +85,32 @@ struct PRStateTests {
     }
 
     @Test
-    func triageCategory_draft_alwaysWaiting() {
+    func triageCategory_draft_reviewRequestedOnly_waitingOnOthers() {
         let pr = PRState.fixture(draftStatus: .draft, reviewRequestedFromMe: true)
+        #expect(pr.triageCategory == .waitingOnOthers)
+    }
+
+    @Test
+    func triageCategory_draft_createdByMe_yourDraft() {
+        let pr = PRState.fixture(draftStatus: .draft, createdByMe: true)
+        #expect(pr.triageCategory == .yourDraft)
+    }
+
+    @Test
+    func triageCategory_draft_assignedToMe_yourDraft() {
+        let pr = PRState.fixture(draftStatus: .draft, assignedToMe: true)
+        #expect(pr.triageCategory == .yourDraft)
+    }
+
+    @Test
+    func triageCategory_draft_createdByMeAndReviewRequested_yourDraft() {
+        let pr = PRState.fixture(draftStatus: .draft, createdByMe: true, reviewRequestedFromMe: true)
+        #expect(pr.triageCategory == .yourDraft)
+    }
+
+    @Test
+    func triageCategory_draft_notMine_waitingOnOthers() {
+        let pr = PRState.fixture(draftStatus: .draft)
         #expect(pr.triageCategory == .waitingOnOthers)
     }
 

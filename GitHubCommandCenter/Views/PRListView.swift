@@ -183,6 +183,7 @@ struct PRListView: View {
     private var prSections: some View {
         let needsAction = appState.needsActionPRs
         let waiting = appState.waitingOnOthersPRs
+        let drafts = appState.yourDraftPRs
 
         if !needsAction.isEmpty {
             sectionHeader("NEEDS YOUR ACTION")
@@ -196,6 +197,14 @@ struct PRListView: View {
             sectionHeader("WAITING ON OTHERS")
             ForEach(waiting) { pr in
                 PRRowView(pr: pr).opacity(0.55)
+                themedDivider()
+            }
+        }
+
+        if !drafts.isEmpty {
+            sectionHeader("YOUR DRAFT PRs")
+            ForEach(drafts) { pr in
+                PRRowView(pr: pr).opacity(0.5)
                 themedDivider()
             }
         }
@@ -457,6 +466,19 @@ private let previewPRs = [
         mergeStatus: .ready,
         assignment: .init(createdByMe: true, reviewRequestedFromMe: false, assignedToMe: false),
         updatedAt: .now.addingTimeInterval(-3_600)
+    ),
+    PRState(
+        number: 56,
+        title: "WIP: Extract polling into background actor",
+        repoFullName: "awjdean/github-command-center",
+        url: previewURL("https://github.com/awjdean/github-command-center/pull/56"),
+        headSHA: "ghi789",
+        draftStatus: .draft,
+        ciStatus: .pending,
+        reviewStatus: .none,
+        mergeStatus: .pending,
+        assignment: .init(createdByMe: true, reviewRequestedFromMe: false, assignedToMe: false),
+        updatedAt: .now.addingTimeInterval(-7_200)
     ),
 ]
 

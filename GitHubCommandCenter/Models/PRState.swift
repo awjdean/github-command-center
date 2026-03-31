@@ -49,6 +49,7 @@ struct PRState: Identifiable, Equatable, Sendable {
     enum TriageCategory: Sendable {
         case needsYourAction
         case waitingOnOthers
+        case yourDraft
     }
 
     // MARK: - Computed
@@ -58,7 +59,12 @@ struct PRState: Identifiable, Equatable, Sendable {
     }
 
     var triageCategory: TriageCategory {
-        guard draftStatus == .ready else { return .waitingOnOthers }
+        guard draftStatus == .ready else {
+            if assignment.createdByMe || assignment.assignedToMe {
+                return .yourDraft
+            }
+            return .waitingOnOthers
+        }
 
         if assignment.reviewRequestedFromMe || assignment.assignedToMe {
             return .needsYourAction

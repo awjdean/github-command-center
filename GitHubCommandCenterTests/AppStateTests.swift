@@ -176,6 +176,42 @@ struct AppStateTests {
     }
 
     @Test
+    func yourDraftPRs_containsDraftsCreatedByMeOrAssignedToMe() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.prs = [
+            .fixture(number: 1, draftStatus: .draft, createdByMe: true),
+            .fixture(number: 2, draftStatus: .draft, assignedToMe: true),
+            .fixture(number: 3, draftStatus: .draft),  // not mine
+            .fixture(number: 4, reviewRequestedFromMe: true),  // needs action (not draft)
+        ]
+
+        #expect(appState.yourDraftPRs.count == 2)
+        #expect(appState.yourDraftPRs.map(\.number).contains(1))
+        #expect(appState.yourDraftPRs.map(\.number).contains(2))
+        #expect(appState.waitingOnOthersPRs.count == 1)
+        #expect(appState.waitingOnOthersPRs.first?.number == 3)
+        #expect(appState.needsActionPRs.count == 1)
+        #expect(appState.needsActionPRs.first?.number == 4)
+    }
+
+    @Test
+    func menuBarBadgeCount_excludesYourDrafts() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.prs = [
+            .fixture(number: 1, reviewRequestedFromMe: true),  // needs action
+            .fixture(number: 2, draftStatus: .draft, createdByMe: true),  // your draft
+        ]
+
+        #expect(appState.menuBarBadgeCount == 1)
+    }
+
+    @Test
     func emptyStateMessage_authenticatedExplainsTrackedScopeAndRepoAccess() {
         let appState = AppState(
             makePollingEngine: { _ in StubPollingEngine() },
