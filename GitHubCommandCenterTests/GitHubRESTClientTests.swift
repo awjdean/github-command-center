@@ -1,8 +1,9 @@
 import Foundation
 import Testing
-// swiftlint:disable file_length type_body_length
 
 @testable import GitHubCommandCenter
+
+// swiftlint:disable file_length type_body_length
 
 @Suite(.serialized)
 struct GitHubRESTClientTests {
@@ -72,8 +73,8 @@ struct GitHubRESTClientTests {
         do {
             _ = try await client.validateToken()
             Issue.record("Expected rateLimitExceeded")
-        } catch AppError.rateLimitExceeded(let resetAt) {
-            #expect(resetAt > Date())
+        } catch AppError.rateLimitExceeded(let context) {
+            #expect(context.resetAt > Date())
         } catch {
             Issue.record("Unexpected error: \(error)")
         }
@@ -95,8 +96,8 @@ struct GitHubRESTClientTests {
         do {
             _ = try await client.validateToken()
             Issue.record("Expected rateLimitExceeded")
-        } catch AppError.rateLimitExceeded(let resetAt) {
-            #expect(resetAt > Date())
+        } catch AppError.rateLimitExceeded(let context) {
+            #expect(context.resetAt > Date())
         } catch {
             Issue.record("Unexpected error: \(error)")
         }
@@ -204,6 +205,87 @@ struct GitHubRESTClientTests {
         #expect(pr.assignment.createdByMe)
         #expect(pr.ciStatus == .passing)
         #expect(pr.mergeStatus == .ready)
+    }
+
+    @Test
+    func fetchAllPRStates_whenOnePRBuildFails_throwsInsteadOfDroppingIt() async {
+        let harness = Harness()
+        defer { harness.teardown() }
+        MockURLProtocol.stub(
+            urlContains: "/search/issues",
+            json: [
+                "total_count": 2,
+                "incomplete_results": false,
+                "items": [
+                    [
+                        "number": 1,
+                        "title": "Healthy PR",
+                        "html_url": "https://github.com/org/one/pull/1",
+                        "draft": false,
+                        "updated_at": "2026-03-30T10:00:00Z",
+                        "repository_url": "https://api.github.com/repos/org/one",
+                    ],
+                    [
+                        "number": 2,
+                        "title": "Broken PR",
+                        "html_url": "https://github.com/org/two/pull/2",
+                        "draft": false,
+                        "updated_at": "2026-03-30T11:00:00Z",
+                        "repository_url": "https://api.github.com/repos/org/two",
+                    ],
+                ],
+            ]
+        )
+
+        MockURLProtocol.stub(urlContains: "/repos/org/one/pulls/1/reviews?per_page=100&page=1", json: [])
+        MockURLProtocol.stub(
+            urlContains: "/repos/org/one/commits/sha-one/status",
+            json: ["state": "success", "statuses": []]
+        )
+        MockURLProtocol.stub(
+            urlContains: "/repos/org/one/commits/sha-one/check-runs",
+            json: ["total_count": 0, "check_runs": []]
+        )
+        MockURLProtocol.stub(
+            urlContains: "/repos/org/one/pulls/1",
+            json: [
+                "head": ["sha": "sha-one"],
+                "state": "open",
+                "user": ["login": "octocat"],
+                "assignees": [],
+                "requested_reviewers": [],
+                "mergeable_state": "clean",
+            ]
+        )
+
+        MockURLProtocol.stub(urlContains: "/repos/org/two/pulls/2/reviews?per_page=100&page=1", json: [])
+        MockURLProtocol.stub(
+            urlContains: "/repos/org/two/commits/sha-two/check-runs",
+            json: ["total_count": 0, "check_runs": []]
+        )
+        MockURLProtocol.stub(urlContains: "/repos/org/two/commits/sha-two/status", statusCode: 500)
+        MockURLProtocol.stub(
+            urlContains: "/repos/org/two/pulls/2",
+            json: [
+                "head": ["sha": "sha-two"],
+                "state": "open",
+                "user": ["login": "octocat"],
+                "assignees": [],
+                "requested_reviewers": [],
+                "mergeable_state": "clean",
+            ]
+        )
+
+        let client = GitHubRESTClient(token: "test-token", session: harness.session)
+
+        do {
+            _ = try await client.fetchAllPRStates(username: "octocat")
+            Issue.record("Expected fetchAllPRStates to throw when one PR build fails")
+        } catch AppError.serverError(let code) {
+            #expect(code == 500)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
     }
 
     @Test
@@ -453,8 +535,8 @@ struct GitHubRESTClientTests {
         do {
             _ = try await client.fetchAllPRStates(username: "octocat")
             Issue.record("Expected rateLimitExceeded")
-        } catch AppError.rateLimitExceeded(let resetAt) {
-            #expect(resetAt > Date())
+        } catch AppError.rateLimitExceeded(let context) {
+            #expect(context.resetAt > Date())
         } catch {
             Issue.record("Unexpected error: \(error)")
         }

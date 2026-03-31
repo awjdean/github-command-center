@@ -1,10 +1,12 @@
 import Foundation
 import OSLog
+
 // swiftlint:disable file_length type_body_length
 
 actor GitHubRESTClient: GitHubDataSource {
     private static let searchResultsMaxPageLimit = 100
     private static let reviewMaxPageLimit = 10
+    private static let checkRunsMaxPageLimit = 10
     private static let logger = Logger(subsystem: Log.subsystem, category: "GitHubRESTClient")
     private static let incompleteSearchWarningMessage =
         "GitHub search results are temporarily incomplete. "
@@ -29,8 +31,20 @@ actor GitHubRESTClient: GitHubDataSource {
     }
 
     private struct LRUCache<Key: Hashable, Value> {
+        private final class Node {
+            let key: Key
+            weak var previous: Node?
+            var next: Node?
+
+            init(key: Key) {
+                self.key = key
+            }
+        }
+
         private var values: [Key: Value] = [:]
-        private var usageOrder: [Key] = []
+        private var nodes: [Key: Node] = [:]
+        private var head: Node?
+        private var tail: Node?
 
         var count: Int {
             values.count
@@ -55,20 +69,67 @@ actor GitHubRESTClient: GitHubDataSource {
 
         @discardableResult
         mutating func removeValue(forKey key: Key) -> Value? {
-            usageOrder.removeAll { $0 == key }
-            return values.removeValue(forKey: key)
+            guard let value = values.removeValue(forKey: key) else { return nil }
+            if let node = nodes.removeValue(forKey: key) {
+                remove(node)
+            }
+            return value
         }
 
         mutating func trim(to maxEntries: Int) {
             guard maxEntries >= 0 else { return }
-            while values.count > maxEntries, let oldestKey = usageOrder.first {
+            while values.count > maxEntries, let oldestKey = head?.key {
                 _ = removeValue(forKey: oldestKey)
             }
         }
 
         private mutating func touch(_ key: Key) {
-            usageOrder.removeAll { $0 == key }
-            usageOrder.append(key)
+            if let node = nodes[key] {
+                moveToTail(node)
+                return
+            }
+
+            let node = Node(key: key)
+            nodes[key] = node
+            append(node)
+        }
+
+        private mutating func append(_ node: Node) {
+            node.previous = tail
+            node.next = nil
+
+            if let tail {
+                tail.next = node
+            } else {
+                head = node
+            }
+
+            tail = node
+        }
+
+        private mutating func moveToTail(_ node: Node) {
+            guard tail !== node else { return }
+            remove(node)
+            append(node)
+        }
+
+        private mutating func remove(_ node: Node) {
+            let previous = node.previous
+            let next = node.next
+
+            previous?.next = next
+            next?.previous = previous
+
+            if head === node {
+                head = next
+            }
+
+            if tail === node {
+                tail = previous
+            }
+
+            node.previous = nil
+            node.next = nil
         }
     }
 
@@ -148,20 +209,7 @@ actor GitHubRESTClient: GitHubDataSource {
                 let item = searchItems[index]
                 index += 1
                 group.addTask { [self] in
-                    do {
-                        return try await buildPRState(from: item, username: username)
-                    } catch let error as AppError {
-                        switch error {
-                        case .authError, .rateLimitExceeded:
-                            throw error
-                        default:
-                            Self.logSkippedPRStateBuild(for: item, error: error)
-                            return nil
-                        }
-                    } catch {
-                        Self.logSkippedPRStateBuild(for: item, error: error)
-                        return nil
-                    }
+                    try await buildPRState(from: item, username: username)
                 }
             }
 
@@ -339,7 +387,7 @@ actor GitHubRESTClient: GitHubDataSource {
         var page = 1
         var allCheckRuns: [CheckRun] = []
 
-        while page <= Self.reviewMaxPageLimit {
+        while page <= Self.checkRunsMaxPageLimit {
             let data: Data
             do {
                 data = try await requestData(
@@ -348,6 +396,14 @@ actor GitHubRESTClient: GitHubDataSource {
             } catch RequestError.statusCode(let statusCode)
                 where statusCode == 401 || statusCode == 403 || statusCode == 404
             {
+                let repository = "\(owner)/\(repo)"
+                Self.logger.info(
+                    """
+                    fetchCheckRuns falling back after check-runs request returned \
+                    \(statusCode, privacy: .public) for \(repository, privacy: .public) \
+                    @\(sha, privacy: .public)
+                    """
+                )
                 return allCheckRuns
             } catch {
                 throw mapRequestError(error)
@@ -633,13 +689,13 @@ actor GitHubRESTClient: GitHubDataSource {
             throw RequestError.statusCode(401)
         case 403:
             if isRateLimitedResponse(data, response) {
-                throw RequestError.app(.rateLimitExceeded(resetAt: rateLimitResetDate(from: response)))
+                throw RequestError.app(.rateLimitExceeded(.init(resetAt: rateLimitResetDate(from: response))))
             }
             throw RequestError.statusCode(403)
         case 404:
             throw RequestError.statusCode(404)
         case 429:
-            throw RequestError.app(.rateLimitExceeded(resetAt: rateLimitResetDate(from: response)))
+            throw RequestError.app(.rateLimitExceeded(.init(resetAt: rateLimitResetDate(from: response))))
         case 500...599:
             throw RequestError.app(.serverError(statusCode: response.statusCode))
         default:
@@ -744,14 +800,6 @@ actor GitHubRESTClient: GitHubDataSource {
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty } ?? []
-    }
-
-    private static func logSkippedPRStateBuild(for item: SearchItem, error: Error) {
-        let prIdentifier = "\(item.repositoryUrl)#\(item.number)"
-        let errorDescription = error.localizedDescription
-        logger.error(
-            "Skipping PR state build for \(prIdentifier, privacy: .public): \(errorDescription, privacy: .public)"
-        )
     }
 
     private func extractRepoName(from repositoryURL: String) -> String? {

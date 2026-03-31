@@ -207,7 +207,7 @@ struct PollingEngineTests {
         let harness = Harness()
         let resetAt = Date().addingTimeInterval(3600)
         harness.mockSource.validateTokenResult = .success("octocat")
-        harness.mockSource.fetchResult = .failure(AppError.rateLimitExceeded(resetAt: resetAt))
+        harness.mockSource.fetchResult = .failure(AppError.rateLimitExceeded(.init(resetAt: resetAt)))
 
         await harness.engine.poll()
 
@@ -323,7 +323,7 @@ struct PollingEngineTests {
         harness.appState.recentlyClosedPRs = [.fixture(number: 2)]
         harness.appState.lastUpdated = Date()
         harness.appState.isLoading = false
-        harness.appState.error = .rateLimitExceeded(resetAt: Date().addingTimeInterval(60))
+        harness.appState.error = .rateLimitExceeded(.init(resetAt: Date().addingTimeInterval(60)))
         harness.appState.isStale = true
         harness.appState.authenticationStatus = .authenticated(username: "octocat")
         harness.appState.tokenValidationWarningMessage = "Still verifying"

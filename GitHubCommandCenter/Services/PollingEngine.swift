@@ -153,13 +153,13 @@ final class PollingEngine: PollingControlling {
             await handleAuthFailure(status: .noToken, error: .noToken, context: &context)
             return .stopLoop
 
-        } catch AppError.rateLimitExceeded(let resetAt) {
-            context.panel.error = .rateLimitExceeded(resetAt: resetAt)
+        } catch AppError.rateLimitExceeded(let rateLimit) {
+            context.panel.error = .rateLimitExceeded(rateLimit)
             context.panel.isLoading = false
             context.panel.isStale = AppState.staleStatus(lastUpdated: context.panel.lastUpdated)
             await appState.applyPollSnapshot(.init(panel: context.panel, auth: context.auth))
 
-            let delay = min(max(resetAt.timeIntervalSinceNow + 5, 60), 3600)
+            let delay = min(max(rateLimit.resetAt.timeIntervalSinceNow + 5, 60), 3600)
             stop()
             pollingTask = Task {
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
@@ -209,6 +209,7 @@ final class PollingEngine: PollingControlling {
     private func scheduleRecentlyClosedClearTask() {
         clearRecentlyClosedTask?.cancel()
         let taskID = UUID()
+        clearRecentlyClosedTaskID = taskID
         clearRecentlyClosedTask = Task { [weak self] in
             guard let self else { return }
 
@@ -222,6 +223,5 @@ final class PollingEngine: PollingControlling {
                 self.clearRecentlyClosedTaskID = nil
             }
         }
-        clearRecentlyClosedTaskID = taskID
     }
 }

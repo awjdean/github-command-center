@@ -117,7 +117,7 @@ final class MockURLProtocol: URLProtocol {
         }
 
         var headerFields = mock.headers
-        if headerFields["Content-Type"] == nil, !mock.data.isEmpty {
+        if headerFields["Content-Type"] == nil, mock.statusCode != 304 {
             headerFields["Content-Type"] = "application/json"
         }
 

@@ -1,20 +1,27 @@
 import Foundation
 
 enum AppError: LocalizedError, Sendable, Equatable {
+    struct RateLimitContext: Sendable, Equatable {
+        let resetAt: Date
+        let nextUpdateDescription: String
+
+        init(resetAt: Date) {
+            self.resetAt = resetAt
+            nextUpdateDescription = resetAt.formatted(.relative(presentation: .named, unitsStyle: .wide))
+        }
+
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.resetAt == rhs.resetAt
+        }
+    }
+
     case authError
     case incompleteSearchResults
     case noToken
     case paginationLimitExceeded
-    case rateLimitExceeded(resetAt: Date)
+    case rateLimitExceeded(RateLimitContext)
     case networkError
     case serverError(statusCode: Int)
-
-    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        return formatter
-    }()
-    private static let relativeDateFormatterLock = NSLock()
 
     var errorDescription: String? {
         switch self {
@@ -26,12 +33,8 @@ enum AppError: LocalizedError, Sendable, Equatable {
             return "No GitHub token configured."
         case .paginationLimitExceeded:
             return "GitHub pagination exceeded the safe page limit. Try again later."
-        case .rateLimitExceeded(let date):
-            AppError.relativeDateFormatterLock.lock()
-            defer { AppError.relativeDateFormatterLock.unlock() }
-            let nextUpdate = AppError.relativeDateFormatter.localizedString(for: date, relativeTo: Date())
-            return
-                "Rate limited — next update \(nextUpdate)"
+        case .rateLimitExceeded(let context):
+            return "Rate limited — next update \(context.nextUpdateDescription)"
         case .networkError:
             return "Network connection failed."
         case .serverError(let code):
