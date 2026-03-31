@@ -8,22 +8,38 @@ struct StatusDotView: View {
     let dimension: StatusDimension
     let pr: PRState
 
+    @State private var showingPopover = false
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(dotColor)
-                .frame(width: 8, height: 8)
+        Button {
+            showingPopover.toggle()
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 8, height: 8)
 
-            // Accessibility: show letter inside dot when "Differentiate without color" is on
-            if differentiateWithoutColor {
-                Text(accessibilityLetter)
-                    .font(.system(size: 6, weight: .bold))
-                    .foregroundColor(accessibilityForegroundColor)
+                // Accessibility: show letter inside dot when "Differentiate without color" is on
+                if differentiateWithoutColor {
+                    Text(accessibilityLetter)
+                        .font(.system(size: 6, weight: .bold))
+                        .foregroundColor(accessibilityForegroundColor)
+                }
             }
+            .contentShape(Circle())
         }
-        .help("\(tooltipLabel): \(tooltipDetail)")
+        .buttonStyle(.plain)
+        .popover(isPresented: $showingPopover, arrowEdge: .bottom) {
+            StatusPopoverView(
+                label: tooltip.label,
+                detail: tooltip.detail
+            )
+        }
+    }
+
+    private var tooltip: StatusDotTooltip {
+        StatusDotTooltip(dimension: dimension, pr: pr)
     }
 
     // MARK: - Color
@@ -117,9 +133,15 @@ struct StatusDotView: View {
         }
     }
 
-    // MARK: - Tooltip
+}
 
-    private var tooltipLabel: String {
+// MARK: - Tooltip data (extracted for testability)
+
+struct StatusDotTooltip {
+    let dimension: StatusDimension
+    let pr: PRState
+
+    var label: String {
         switch dimension {
         case .ci: return "CI"
         case .review: return "REVIEW"
@@ -127,7 +149,7 @@ struct StatusDotView: View {
         }
     }
 
-    private var tooltipDetail: String {
+    var detail: String {
         switch dimension {
         case .ci:
             switch pr.ciStatus {
@@ -166,5 +188,27 @@ struct StatusDotView: View {
                 return "Checking mergeability…"
             }
         }
+    }
+}
+
+// MARK: - Popover content
+
+private struct StatusPopoverView: View {
+    let label: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.sectionLabel)
+                .tracking(0.5)
+                .foregroundColor(.textTertiary)
+            Text(detail)
+                .font(.footerText)
+                .foregroundColor(.textSecondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .fixedSize()
     }
 }
