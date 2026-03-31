@@ -2,7 +2,7 @@
 
 All notable changes to GitHub Command Center will be documented in this file.
 
-## [0.1.0.0] - 2026-03-31
+## [0.1.0] - 2026-03-31
 
 Initial MVP release. A macOS menu bar app that monitors your GitHub PRs and tells you what needs attention.
 
