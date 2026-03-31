@@ -6,12 +6,17 @@ struct GitHubCommandCenterApp: App {
     @StateObject private var appState: AppState
 
     init() {
-        self.init(appState: AppState())
+        self.init(
+            appState: AppState(),
+            shouldStartPolling: !RuntimeEnvironment.isRunningTests
+        )
     }
 
-    init(appState: AppState) {
+    init(appState: AppState, shouldStartPolling: Bool = true) {
         _appState = StateObject(wrappedValue: appState)
-        appState.startPollingIfNeeded()
+        if shouldStartPolling {
+            appState.startPollingIfNeeded()
+        }
     }
 
     var body: some Scene {
@@ -22,5 +27,11 @@ struct GitHubCommandCenterApp: App {
             MenuBarIconView(healthStatus: appState.healthStatus, prCount: appState.prs.count)
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+private enum RuntimeEnvironment {
+    static var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 }

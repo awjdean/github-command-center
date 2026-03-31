@@ -26,5 +26,7 @@
     <string>GitHub Command Center sends notifications when your PR statuses change.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>DevEnvSearchRoot</key>
+    <string>$(DEV_ENV_SEARCH_ROOT)</string>
 </dict>
 </plist>

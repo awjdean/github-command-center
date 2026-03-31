@@ -27,8 +27,11 @@ targets:
       configs:
         Debug:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+          # Repo root for `.env.local` / `.env` bootstrap; only path is embedded (not the token).
+          DEV_ENV_SEARCH_ROOT: $(SRCROOT)
         Release:
           SWIFT_OPTIMIZATION_LEVEL: "-O"
+          DEV_ENV_SEARCH_ROOT: ""
 
   GitHubCommandCenterTests:
     type: bundle.unit-test

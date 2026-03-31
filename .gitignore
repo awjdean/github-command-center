@@ -18,6 +18,8 @@ xcuserdata/
 # Claude Code
 .claude/settings.local.json
 .mise.local.toml
+.env
+.env.local
 
 # gstack
 .gstack/
