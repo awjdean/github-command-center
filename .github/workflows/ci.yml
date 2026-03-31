@@ -27,9 +27,9 @@ jobs:
             ~/Library/Developer/Xcode/DerivedData
             build/DerivedData
             .build
-          key: ${{ runner.os }}-swiftpm-${{ hashFiles('**/Package.resolved') }}
+          key: ${{ runner.os }}-xcode-${{ hashFiles('project.yml', 'Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-swiftpm-
+            ${{ runner.os }}-xcode-
 
       # Keep CI on the Xcode 16 toolchain expected by the project.
       - name: Select Xcode

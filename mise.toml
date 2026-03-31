@@ -81,7 +81,7 @@ depends = ["sync", "check-style", "test"]
 
 [tasks.fix]
 description = "Fix all formatting + lint issues"
-run = ["mise run sync", "mise run fix-style"]
+depends = ["sync", "fix-style"]
 
 [tasks.start]
 description = "Build and launch the app"

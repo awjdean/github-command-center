@@ -52,7 +52,7 @@ jobs:
           echo "Found app at: $APP_PATH"
           cp -R "$APP_PATH" .
           zip -r "GitHubCommandCenter-${{ github.ref_name }}.zip" "$APP_BUNDLE_NAME"
-          # Strip quarantine metadata note from README context
+          # Print macOS installation/quarantine note to the job log.
           echo "To install: unzip, move to /Applications, then right-click > Open on first launch (unsigned build)."
 
       - name: Create GitHub Release
