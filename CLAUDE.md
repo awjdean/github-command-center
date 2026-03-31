@@ -1,3 +1,17 @@
+## Project
+
+Swift/SwiftUI macOS 14+ menu bar app monitoring GitHub PR status. No external Swift dependencies.
+
+## Build & Test (CLI)
+
+- First-time setup: `mise install`
+- Sync tools and regenerate the Xcode project: `mise run sync`
+- Build: `mise run build`
+- Test: `mise run test`
+- Style checks: `mise run check`
+- Fix, then re-run style checks and tests: `mise run verify`
+- After editing `project.yml`: run `mise run sync`
+
 ## Skill routing
 
 When the user's request matches an available skill, ALWAYS invoke it using the Skill

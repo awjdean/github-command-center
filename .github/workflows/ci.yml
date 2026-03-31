@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: fix-and-check
+    runs-on: macos-15
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    env:
+      XCODE_VERSION: "26.3"
+    steps:
+      - uses: actions/checkout@v4
+
+      # Keep CI on the Xcode 26.3 toolchain expected by the project.
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1.7.0
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Setup mise
+        uses: jdx/mise-action@v4.0.1
+        with:
+          install: true
+
+      - name: Cache SwiftPM and DerivedData
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/org.swift.swiftpm
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData
+            build/DerivedData
+            .build
+          key: ${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('project.yml', 'Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-
+            ${{ runner.os }}-xcode-
+
+      - name: Run auto-fixes
+        run: mise run fix
+
+      - name: Verify auto-fixes produced no changes
+        run: |
+          if [[ -n "$(git status --short --untracked-files=all)" ]]; then
+            git status --short --untracked-files=all
+            exit 1
+          fi
+
+      - name: Run repo checks
+        run: mise run check
+
+      - name: Verify checks produced no changes
+        run: |
+          if [[ -n "$(git status --short --untracked-files=all)" ]]; then
+            git status --short --untracked-files=all
+            exit 1
+          fi

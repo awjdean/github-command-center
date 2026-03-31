@@ -1,0 +1,26 @@
+# Xcode
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# Swift Package Manager
+.build/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# XcodeGen (project is regenerated from project.yml)
+*.xcodeproj/project.pbxproj
+
+# Claude Code
+.claude/settings.local.json
+.mise.local.toml
+.env
+.env.local
+
+# gstack
+.gstack/
+.conductor/

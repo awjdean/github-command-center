@@ -1,0 +1,277 @@
+import Foundation
+import OSLog
+
+@MainActor
+final class PollingEngine: PollingControlling {
+    enum PollOutcome: Equatable {
+        case useRegularInterval
+        case continueImmediately
+        case stopLoop
+    }
+
+    private let appState: AppState
+    private let recentlyClosedClearDelay: TimeInterval
+    private let loadToken: @Sendable () throws -> String?
+    private let sleep: @Sendable (TimeInterval) async -> Void
+    private static let logger = Logger(subsystem: Log.subsystem, category: "PollingEngine")
+    private(set) var client: (any GitHubDataSource)?
+    private var pollingTask: Task<Void, Never>?
+    private var clearRecentlyClosedTask: Task<Void, Never>?
+    private var clearRecentlyClosedTaskID: UUID?
+    private var previousPRs: [PRState] = []
+    private var consecutiveFailures = 0
+
+    init(
+        appState: AppState,
+        dataSource: (any GitHubDataSource)? = nil,
+        recentlyClosedClearDelay: TimeInterval = 5,
+        loadToken: @escaping @Sendable () throws -> String? = { try KeychainService.shared.loadToken() },
+        sleep: @escaping @Sendable (TimeInterval) async -> Void = { interval in
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
+    ) {
+        self.appState = appState
+        self.client = dataSource
+        self.recentlyClosedClearDelay = recentlyClosedClearDelay
+        self.loadToken = loadToken
+        self.sleep = sleep
+    }
+
+    func start() {
+        guard pollingTask == nil else { return }
+        pollingTask = Task { await runLoop() }
+    }
+
+    func stop() {
+        pollingTask?.cancel()
+        pollingTask = nil
+    }
+
+    func reset() {
+        clearRecentlyClosedTask?.cancel()
+        clearRecentlyClosedTask = nil
+        clearRecentlyClosedTaskID = nil
+        previousPRs = []
+        consecutiveFailures = 0
+    }
+
+    func forceRefresh() {
+        pollingTask?.cancel()
+        pollingTask = Task {
+            let outcome = await poll()
+            guard outcome != .stopLoop else { return }
+            await runLoop()
+        }
+    }
+
+    var pollInterval: TimeInterval {
+        switch appState.prs.count {
+        case 0..<20:
+            return 60
+        case 20..<40:
+            return 120
+        default:
+            return 300
+        }
+    }
+
+    private func runLoop() async {
+        pollingLoop: while !Task.isCancelled {
+            let outcome = await poll()
+            guard !Task.isCancelled else { break }
+
+            switch outcome {
+            case .useRegularInterval:
+                let interval = pollInterval
+                await sleep(interval)
+            case .continueImmediately:
+                continue pollingLoop
+            case .stopLoop:
+                break pollingLoop
+            }
+        }
+    }
+
+    @discardableResult
+    func poll() async -> PollOutcome {
+        var context = await appState.currentPollContext()
+        context.panel.isStale = AppState.staleStatus(lastUpdated: context.panel.lastUpdated)
+
+        if client == nil {
+            do {
+                let token = try loadToken()
+                guard let token, !token.isEmpty else {
+                    await handleAuthFailure(status: .noToken, error: .noToken, context: &context)
+                    return .stopLoop
+                }
+                client = GitHubRESTClient(token: token)
+            } catch let error as KeychainService.KeychainError {
+                let errorDescription = error.localizedDescription
+                Self.logger.error(
+                    "Failed to load token from keychain before polling: \(errorDescription, privacy: .public)"
+                )
+                await handleAuthFailure(status: .unknown, error: .keychainError, context: &context)
+                return .stopLoop
+            } catch {
+                Self.logger.error(
+                    "Failed to load token from keychain before polling: \(String(describing: error), privacy: .public)"
+                )
+                await handleAuthFailure(status: .failed, error: .authError, context: &context)
+                return .stopLoop
+            }
+        }
+
+        guard let client else { return .stopLoop }
+
+        do {
+            let username: String
+            if case .authenticated(let authenticatedUsername) = context.auth.authenticationStatus {
+                username = authenticatedUsername
+            } else {
+                username = try await client.validateToken()
+                context.auth.authenticationStatus = .authenticated(username: username)
+            }
+
+            let fetchResult = try await client.fetchAllPRStates(username: username)
+            let newPRs = fetchResult.prs
+            let newIDs = Set(newPRs.map(\.id))
+            let disappeared = previousPRs.filter { !newIDs.contains($0.id) }
+            let recentlyClosed = await client.resolveDisappearedPRs(disappeared)
+
+            if !previousPRs.isEmpty {
+                NotificationService.shared.checkTransitions(
+                    from: previousPRs,
+                    to: newPRs,
+                    disappeared: recentlyClosed
+                )
+            }
+
+            context.panel.triageSnapshot = .build(from: newPRs)
+            context.panel.recentlyClosedPRs = recentlyClosed
+            context.panel.lastUpdated = Date()
+            context.panel.isLoading = false
+            context.panel.warningMessage = fetchResult.warningMessage
+            context.panel.error = nil
+            context.panel.isStale = false
+
+            if !newPRs.isEmpty {
+                context.auth.tokenValidationWarningMessage = nil
+            }
+
+            if !recentlyClosed.isEmpty {
+                scheduleRecentlyClosedClearTask()
+            }
+
+            previousPRs = newPRs
+            consecutiveFailures = 0
+            await appState.applyPollSnapshot(.init(panel: context.panel, auth: context.auth))
+            return .useRegularInterval
+
+        } catch let error as AppError {
+            switch error {
+            case .authError:
+                await handleAuthFailure(status: .failed, error: .authError, context: &context)
+                return .stopLoop
+            case .keychainError:
+                await handleAuthFailure(status: .unknown, error: .keychainError, context: &context)
+                return .stopLoop
+            case .noToken:
+                await handleAuthFailure(status: .noToken, error: .noToken, context: &context)
+                return .stopLoop
+            case .rateLimitExceeded(let rateLimit):
+                return await handleRateLimitExceeded(rateLimit, context: &context)
+            case .incompleteSearchResults, .paginationLimitExceeded:
+                return await handleRegularPollError(error, context: &context)
+            case .networkError, .serverError:
+                return await handleImmediateRetryError(error, context: &context)
+            }
+        } catch {
+            return await handleImmediateRetryError(.networkError, context: &context)
+        }
+    }
+
+    private func handleAuthFailure(
+        status: AppState.AuthStatus,
+        error: AppError,
+        context: inout AppState.PollContext
+    ) async {
+        context.auth.authenticationStatus = status
+        context.panel.error = error
+        context.panel.isLoading = false
+        context.panel.isStale = AppState.staleStatus(lastUpdated: context.panel.lastUpdated)
+        await appState.applyPollSnapshot(.init(panel: context.panel, auth: context.auth))
+        stop()
+    }
+
+    private func handleRateLimitExceeded(
+        _ rateLimit: AppError.RateLimitContext,
+        context: inout AppState.PollContext
+    ) async -> PollOutcome {
+        consecutiveFailures = 0
+        await applyPollingError(.rateLimitExceeded(rateLimit), context: &context)
+
+        let delay = min(max(rateLimit.resetAt.timeIntervalSinceNow + 5, 60), 3600)
+        stop()
+        pollingTask = Task {
+            await self.sleep(delay)
+            guard !Task.isCancelled else { return }
+
+            var recoveryContext = await self.appState.currentPollContext()
+            recoveryContext.panel.error = nil
+            recoveryContext.panel.isStale = AppState.staleStatus(lastUpdated: recoveryContext.panel.lastUpdated)
+            await self.appState.applyPollSnapshot(.init(panel: recoveryContext.panel, auth: recoveryContext.auth))
+            await self.runLoop()
+        }
+        return .stopLoop
+    }
+
+    private func handleRegularPollError(
+        _ error: AppError,
+        context: inout AppState.PollContext
+    ) async -> PollOutcome {
+        consecutiveFailures = 0
+        await applyPollingError(error, context: &context)
+        return .useRegularInterval
+    }
+
+    private func handleImmediateRetryError(
+        _ error: AppError,
+        context: inout AppState.PollContext
+    ) async -> PollOutcome {
+        consecutiveFailures += 1
+        await applyPollingError(error, context: &context)
+
+        let zeroBasedFailureCount = max(consecutiveFailures - 1, 0)
+        let backoff = min(pow(2, Double(zeroBasedFailureCount + 1)), 60.0)
+        await sleep(backoff)
+        return .continueImmediately
+    }
+
+    private func applyPollingError(
+        _ error: AppError,
+        context: inout AppState.PollContext
+    ) async {
+        context.panel.error = error
+        context.panel.isLoading = false
+        context.panel.isStale = AppState.staleStatus(lastUpdated: context.panel.lastUpdated)
+        await appState.applyPollSnapshot(.init(panel: context.panel, auth: context.auth))
+    }
+
+    private func scheduleRecentlyClosedClearTask() {
+        clearRecentlyClosedTask?.cancel()
+        let taskID = UUID()
+        clearRecentlyClosedTaskID = taskID
+        clearRecentlyClosedTask = Task { [weak self] in
+            guard let self else { return }
+
+            await self.sleep(self.recentlyClosedClearDelay)
+            guard !Task.isCancelled else { return }
+
+            await self.appState.clearRecentlyClosedPRs()
+            if self.clearRecentlyClosedTaskID == taskID {
+                self.clearRecentlyClosedTask = nil
+                self.clearRecentlyClosedTaskID = nil
+            }
+        }
+    }
+}

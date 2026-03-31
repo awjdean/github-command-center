@@ -1,0 +1,46 @@
+name: GitHubCommandCenter
+options:
+  bundleIdPrefix: com.awjdean
+  xcodeVersion: "26.3"
+  createIntermediateGroups: true
+
+targets:
+  GitHubCommandCenter:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: GitHubCommandCenter
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.awjdean.GitHubCommandCenter
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_FILE: GitHubCommandCenter/Info.plist
+        CODE_SIGN_ENTITLEMENTS: GitHubCommandCenter/GitHubCommandCenter.entitlements
+        SWIFT_VERSION: "5.9"
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Automatic
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+          # Repo root for `.env.local` / `.env` bootstrap; only path is embedded (not the token).
+          DEV_ENV_SEARCH_ROOT: $(SRCROOT)
+        Release:
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
+          DEV_ENV_SEARCH_ROOT: ""
+
+  GitHubCommandCenterTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: GitHubCommandCenterTests
+    dependencies:
+      - target: GitHubCommandCenter
+    settings:
+      base:
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/GitHubCommandCenter.app/Contents/MacOS/GitHubCommandCenter"
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: YES

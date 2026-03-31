@@ -12,3 +12,9 @@ After 1-2 weeks of using updated_at sort in MVP, add urgency scoring with weight
 informed by actual usage. The triage split (Needs Action vs Waiting) ships in MVP.
 Only the within-section sort order is deferred. Track which PR orderings feel wrong
 during personal use, then define weights based on those observations.
+
+## V1.1 — Team review request support
+Handle GitHub team-based review requests in triage so CODEOWNERS and reviewer teams
+surface as waiting-for-review/review-requested states instead of disappearing from
+the app. This needs `requested_teams` support plus a way to map the authenticated
+user to their GitHub teams.
