@@ -53,7 +53,7 @@ extension GitHubRESTClientTests {
     }
 
     @Test
-    func validateTokenForAppAccess_incompleteSearchResults_throwsIncompleteSearchResults() async {
+    func validateTokenForAppAccess_incompleteSearchResults_returnsWarning() async {
         let harness = Harness()
         defer { harness.teardown() }
         let expectedMessage =

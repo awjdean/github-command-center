@@ -72,7 +72,10 @@ extension GitHubRESTClientTests {
             MockURLProtocol.stub(urlContains: "/status", statusCode: statusCodeForCommitStatuses)
         }
         MockURLProtocol.stub(
-            urlContains: "/pulls/\(number)",
+            description: "pull details \(owner)/\(repo)#\(number)",
+            matching: { url in
+                url.path == "/repos/\(owner)/\(repo)/pulls/\(number)"
+            },
             json: [
                 "head": ["sha": "abc123def456"],
                 "state": "open",

@@ -53,12 +53,12 @@ final class MockGitHubDataSource: GitHubDataSource, @unchecked Sendable {
     }
 
     func fetchAllPRStates(username: String) async throws -> PRFetchResult {
-        let result = stateQueue.sync {
+        let fetchResult = stateQueue.sync {
             storedFetchCallCount += 1
             return storedFetchResult
         }
 
-        switch result {
+        switch fetchResult {
         case .success(let result): return result
         case .failure(let error): throw error
         }
