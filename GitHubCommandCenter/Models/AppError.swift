@@ -9,6 +9,13 @@ enum AppError: LocalizedError, Sendable, Equatable {
     case networkError
     case serverError(statusCode: Int)
 
+    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return formatter
+    }()
+    private static let relativeDateFormatterLock = NSLock()
+
     var errorDescription: String? {
         switch self {
         case .authError:
@@ -20,9 +27,9 @@ enum AppError: LocalizedError, Sendable, Equatable {
         case .paginationLimitExceeded:
             return "GitHub pagination exceeded the safe page limit. Try again later."
         case .rateLimitExceeded(let date):
-            let formatter = RelativeDateTimeFormatter()
-            formatter.unitsStyle = .full
-            let nextUpdate = formatter.localizedString(for: date, relativeTo: Date())
+            AppError.relativeDateFormatterLock.lock()
+            let nextUpdate = AppError.relativeDateFormatter.localizedString(for: date, relativeTo: Date())
+            AppError.relativeDateFormatterLock.unlock()
             return
                 "Rate limited — next update \(nextUpdate)"
         case .networkError:
