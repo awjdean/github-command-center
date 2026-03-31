@@ -7,7 +7,7 @@ import Testing
 struct PRPanelModeTests {
     @Test
     func panelModeHasExpectedWidth() {
-        #expect(PanelMode.width == 360)
+        #expect(PanelMode.width == 480)
     }
 
     @Test

@@ -61,6 +61,7 @@ xcodebuild \
 
 [tasks."check-style"]
 description = "Check Swift formatting + lint"
+depends = ["sync"]
 run = [
   "swift format lint --strict --recursive GitHubCommandCenter GitHubCommandCenterTests",
   "swiftlint lint --strict",
