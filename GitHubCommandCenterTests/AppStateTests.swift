@@ -95,9 +95,9 @@ struct AppStateTests {
         #expect(!appState.isLoading)
         #expect(appState.panelContentState == .setupRequired)
 
-        if case .noToken = appState.authenticationStatus {
-        } else {
+        guard case .noToken = appState.authenticationStatus else {
             Issue.record("Expected authentication status to be noToken")
+            return
         }
     }
 
@@ -160,6 +160,109 @@ struct AppStateTests {
         appState.authenticationStatus = .authenticated(username: "octocat")
 
         #expect(appState.panelSubtitleText == "0 tracked PRs")
+    }
+
+    @Test
+    func healthStatus_noTokenWithNoPRs_isYellow() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.isLoading = false
+        appState.authenticationStatus = .noToken
+
+        #expect(appState.healthStatus == .yellow)
+    }
+
+    @Test
+    func healthStatus_authFailureWithNoPRs_isRed() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.isLoading = false
+        appState.authenticationStatus = .failed
+
+        #expect(appState.healthStatus == .red)
+    }
+
+    @Test
+    func healthStatus_rateLimitedWithExistingSnapshot_isRed() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.isLoading = false
+        appState.prs = [.fixture(number: 1)]
+        appState.error = .rateLimitExceeded(.init(resetAt: Date().addingTimeInterval(60)))
+
+        #expect(appState.healthStatus == .red)
+    }
+
+    @Test
+    func healthStatus_staleWithoutHardError_isYellow() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.isLoading = false
+        appState.isStale = true
+
+        #expect(appState.healthStatus == .yellow)
+    }
+
+    @Test
+    func healthStatus_incompleteSearchResults_isYellow() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.isLoading = false
+        appState.error = .incompleteSearchResults
+
+        #expect(appState.healthStatus == .yellow)
+    }
+
+    @Test
+    func healthStatus_healthyEmptyState_isGreen() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.isLoading = false
+        appState.authenticationStatus = .authenticated(username: "octocat")
+
+        #expect(appState.healthStatus == .green)
+    }
+
+    @Test
+    func healthStatus_healthyNeedsActionLowUrgency_usesTriageYellow() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.isLoading = false
+        appState.prs = [.fixture(number: 1, reviewRequestedFromMe: true)]
+
+        #expect(appState.healthStatus == .yellow)
+    }
+
+    @Test
+    func healthStatus_healthyNeedsActionHighUrgency_usesTriageRed() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.isLoading = false
+        appState.prs = [
+            .fixture(
+                number: 1,
+                reviewStatus: .changesRequested(by: ["alice"]),
+                createdByMe: true
+            )
+        ]
+
+        #expect(appState.healthStatus == .red)
     }
 
     @Test
@@ -285,11 +388,10 @@ struct AppStateTests {
         #expect(appState.panel.isLoading == false)
         #expect(appState.panel.triageSnapshot.menuBarBadgeCount == 1)
 
-        if case .authenticated(let username) = appState.auth.authenticationStatus {
-            #expect(username == "octocat")
-        } else {
-            Issue.record("Expected authenticated auth state after applying snapshot")
-        }
+        assertAuthenticated(
+            appState: appState,
+            expectedUsername: "octocat"
+        )
     }
 
     @Test
@@ -320,5 +422,17 @@ struct AppStateTests {
         appState.auth.authenticationStatus = .authenticated(username: "octocat")
 
         #expect(appState.panel.triageSnapshot == originalSnapshot)
+    }
+
+    private func assertAuthenticated(
+        appState: AppState,
+        expectedUsername: String
+    ) {
+        guard case .authenticated(let username) = appState.auth.authenticationStatus else {
+            Issue.record("Expected authenticated auth state")
+            return
+        }
+
+        #expect(username == expectedUsername)
     }
 }

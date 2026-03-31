@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 
+@MainActor
 protocol PollingControlling: AnyObject {
     func start()
     func stop()
@@ -8,6 +9,7 @@ protocol PollingControlling: AnyObject {
     func forceRefresh()
 }
 
+@MainActor
 final class NoOpPollingController: PollingControlling {
     func start() {}
     func stop() {}
@@ -190,7 +192,30 @@ final class AppState {
     }
 
     var healthStatus: HealthStatus {
-        panel.triageSnapshot.healthStatus
+        if case .failed = auth.authenticationStatus {
+            return .red
+        }
+
+        if let error = panel.error {
+            switch error {
+            case .rateLimitExceeded, .networkError, .serverError, .paginationLimitExceeded:
+                return .red
+            case .incompleteSearchResults:
+                return .yellow
+            case .authError, .noToken:
+                break
+            }
+        }
+
+        if case .noToken = auth.authenticationStatus {
+            return .yellow
+        }
+
+        if panel.isStale {
+            return .yellow
+        }
+
+        return panel.triageSnapshot.healthStatus
     }
 
     var isRateLimited: Bool {
@@ -202,8 +227,8 @@ final class AppState {
     }
 
     var rateLimitResetDate: Date? {
-        if case .rateLimitExceeded(let date) = panel.error {
-            return date
+        if case .rateLimitExceeded(let context) = panel.error {
+            return context.resetAt
         }
 
         return nil

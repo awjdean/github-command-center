@@ -25,8 +25,8 @@ struct GitHubCommandCenterApp: App {
                 .environment(appState)
         } label: {
             MenuBarIconView(
-                healthStatus: appState.panel.triageSnapshot.healthStatus,
-                prCount: appState.panel.triageSnapshot.menuBarBadgeCount,
+                healthStatus: appState.healthStatus,
+                prCount: appState.menuBarBadgeCount,
                 isLoading: appState.panel.isLoading
             )
         }
