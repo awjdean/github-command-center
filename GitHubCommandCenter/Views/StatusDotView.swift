@@ -27,6 +27,7 @@ struct StatusDotView: View {
                         .foregroundColor(accessibilityForegroundColor)
                 }
             }
+            .padding(8)
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
