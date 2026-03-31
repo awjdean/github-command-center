@@ -23,7 +23,7 @@
 
 # Bugs
 - [ ] When a PR is in draft the CI indicator always shows "Checking mergeability" whatever is actually happening to the CI. Can we please make it so that the CI indicator info popup says the actual mergeability status.
-- [ ] Consider the following scenario: user A has ownership of a PR, and then requests a review from user B, and then user B submits a "Changes requested" review on a PR, and then user A actions changes and then submits a review.
+- [ ] Consider the following scenario: user A has ownership of PR1, and then requests a review from user B, and then user B submits a "Changes requested" review on a PR, and then user A actions changes and then requests another review from user B. Currently, PR1's review indicator is red and the review indicator information dropdown gives the reason as "Changes requested by x". We want the behaviour to be that PR1's review indication indicates that a review has been requested from user B (this should also make the review indicator state for PR1 orange).
 - [ ] The plan(docking) PR (in draft) shows "Checks pending" when all the checks have passed.
 - [ ] PRs that are in draft, that you didn't create and are not assigned to should not appear in the app.
 - [ ] Failing CI checks show repeated info in the info pop up (e.g., meeko PR).
