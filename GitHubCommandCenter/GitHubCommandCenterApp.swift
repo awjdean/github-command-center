@@ -24,7 +24,11 @@ struct GitHubCommandCenterApp: App {
             PRListView()
                 .environmentObject(appState)
         } label: {
-            MenuBarIconView(healthStatus: appState.healthStatus, prCount: appState.menuBarBadgeCount)
+            MenuBarIconView(
+                healthStatus: appState.healthStatus,
+                prCount: appState.menuBarBadgeCount,
+                isLoading: appState.isLoading
+            )
         }
         .menuBarExtraStyle(.window)
     }
