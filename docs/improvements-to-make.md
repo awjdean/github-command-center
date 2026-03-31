@@ -14,7 +14,7 @@
 - [X] Add a loading state for the menu bar icon when the app is first loading up.
 
 
-- [ ] Ability to reorder PRs.
+
 
 - [ ] Make the dropdown resizable lengthways by clicking and dragging on the bottom edge of the dropdown. The length of the dropdown should persist between dropdown opens and app restarts.
 - [ ] Make is so that you can always see the title of the triage category at the top when you're scrolling. For example, at first as you scroll down the "NEEDS YOUR ACTION" should remain at the top, then when the "WAITING ON OTHERS" gets to the top it should push up the "NEEDS YOUR ACTION" and then "WAITING ON OTHERS" should take its place at the top, then when "YOUR DRAFT PRs" reaches the top it should push "WAITING ON OTHERS" up and then "YOUR DRAFT PRs" should be at the top.
@@ -31,7 +31,9 @@
 
 # Features
 - [ ] in the CI checks info popup can we show for each action if it has failed (red x), is running (amber circle), or has passed (green tick).
-- [ ] Filter repo.
+- [ ] Filter repos.
+- [ ] Set PR priorities – prioritised PRs will be put at the top of lists.
+- [ ] Ability to reorder PRs.
 
 
 # Efficiency

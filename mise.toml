@@ -2,7 +2,7 @@
 swiftlint = "0.63.2"
 xcodegen = "2.45.3"
 hk = "1.39.0"
-pkl = "0.31.1"
+pkl = "0.31.1" # required by hk via hk.pkl
 
 [tasks.sync]
 description = "Install all project dependencies"
@@ -69,6 +69,7 @@ run = [
 
 [tasks."fix-style"]
 description = "Auto-fix Swift formatting + lint issues"
+depends = ["sync"]
 run = [
   "swift format --in-place --recursive GitHubCommandCenter GitHubCommandCenterTests",
   "swiftlint lint --fix",

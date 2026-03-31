@@ -1,6 +1,6 @@
 ## Project
 
-Swift/SwiftUI macOS 13+ menu bar app monitoring GitHub PR status. No external Swift dependencies.
+Swift/SwiftUI macOS 14+ menu bar app monitoring GitHub PR status. No external Swift dependencies.
 
 ## Build & Test (CLI)
 
