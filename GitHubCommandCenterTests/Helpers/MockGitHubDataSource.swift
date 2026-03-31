@@ -5,12 +5,32 @@ import Foundation
 final class MockGitHubDataSource: GitHubDataSource {
     private let stateQueue = DispatchQueue(label: "MockGitHubDataSource.state")
 
-    var validateTokenResult: Result<String, Error> = .success("testuser")
-    var fetchResult: Result<[PRState], Error> = .success([])
+    private var storedValidateTokenResult: Result<String, Error> = .success("testuser")
+    private var storedFetchResult: Result<[PRState], Error> = .success([])
     private var storedValidateTokenCallCount = 0
     private var storedFetchCallCount = 0
-    var resolvedDisappearedPRs: [PRState] = []
-    var lastResolvedDisappearedInput: [PRState] = []
+    private var storedResolvedDisappearedPRs: [PRState] = []
+    private var storedLastResolvedDisappearedInput: [PRState] = []
+
+    var validateTokenResult: Result<String, Error> {
+        get { stateQueue.sync { storedValidateTokenResult } }
+        set { stateQueue.sync { storedValidateTokenResult = newValue } }
+    }
+
+    var fetchResult: Result<[PRState], Error> {
+        get { stateQueue.sync { storedFetchResult } }
+        set { stateQueue.sync { storedFetchResult = newValue } }
+    }
+
+    var resolvedDisappearedPRs: [PRState] {
+        get { stateQueue.sync { storedResolvedDisappearedPRs } }
+        set { stateQueue.sync { storedResolvedDisappearedPRs = newValue } }
+    }
+
+    var lastResolvedDisappearedInput: [PRState] {
+        get { stateQueue.sync { storedLastResolvedDisappearedInput } }
+        set { stateQueue.sync { storedLastResolvedDisappearedInput = newValue } }
+    }
 
     var validateTokenCallCount: Int {
         stateQueue.sync { storedValidateTokenCallCount }
@@ -21,16 +41,24 @@ final class MockGitHubDataSource: GitHubDataSource {
     }
 
     func validateToken() async throws -> String {
-        stateQueue.sync { storedValidateTokenCallCount += 1 }
-        switch validateTokenResult {
+        let result = stateQueue.sync {
+            storedValidateTokenCallCount += 1
+            return storedValidateTokenResult
+        }
+
+        switch result {
         case .success(let username): return username
         case .failure(let error): throw error
         }
     }
 
     func fetchAllPRStates(username: String) async throws -> [PRState] {
-        stateQueue.sync { storedFetchCallCount += 1 }
-        switch fetchResult {
+        let result = stateQueue.sync {
+            storedFetchCallCount += 1
+            return storedFetchResult
+        }
+
+        switch result {
         case .success(let prs): return prs
         case .failure(let error): throw error
         }
@@ -38,8 +66,8 @@ final class MockGitHubDataSource: GitHubDataSource {
 
     func resolveDisappearedPRs(_ prs: [PRState]) async -> [PRState] {
         stateQueue.sync {
-            lastResolvedDisappearedInput = prs
-            return resolvedDisappearedPRs
+            storedLastResolvedDisappearedInput = prs
+            return storedResolvedDisappearedPRs
         }
     }
 }

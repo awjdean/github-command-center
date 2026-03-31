@@ -8,9 +8,9 @@ enum SettingsLinks {
 }
 
 struct SettingsContentView: View {
-    private static let logger = Logger(subsystem: logSubsystem, category: "SettingsView")
+    private static let logger = Logger(subsystem: Log.subsystem, category: "SettingsView")
 
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) private var appState
     @State private var tokenInput = ""
     @State private var tokenState: TokenState = .empty
     @State private var tokenSaveErrorMessage: String?
@@ -422,11 +422,10 @@ struct SettingsContentView: View {
                             try SMAppService.mainApp.unregister()
                         }
                     } catch {
+                        let action = enabled ? "register" : "unregister"
                         let errorDescription = error.localizedDescription
                         Self.logger.error(
-                            "Launch at Login registration/unregistration failed "
-                                + "(enabled: \(enabled, privacy: .public)): "
-                                + "\(errorDescription, privacy: .public)"
+                            "\(action, privacy: .public) launch at login failed: \(errorDescription, privacy: .public)"
                         )
                         launchAtLogin = (SMAppService.mainApp.status == .enabled)
                     }
@@ -510,20 +509,25 @@ struct SettingsContentView: View {
 
     private func saveToken() {
         guard !tokenInput.isEmpty else { return }
+        let tokenToSave = tokenInput
         isValidating = true
 
         Task { @MainActor in
             do {
                 clearTokenSaveValidationState()
-                let client = GitHubRESTClient(token: tokenInput)
+                let client = GitHubRESTClient(token: tokenToSave)
                 let validationResult = try await client.validateTokenForAppAccess()
+                guard tokenInput == tokenToSave else {
+                    isValidating = false
+                    return
+                }
                 let successOutcome = Self.tokenSaveSuccessOutcome(for: validationResult)
-                try KeychainService.shared.saveToken(tokenInput)
+                try KeychainService.shared.saveToken(tokenToSave)
                 withAnimation(.easeInOut(duration: 0.2)) {
                     tokenState = successOutcome.tokenState
                 }
                 appState.tokenValidationWarningMessage = successOutcome.warningMessage
-                refreshTokenAccessDetails(using: tokenInput)
+                refreshTokenAccessDetails(using: tokenToSave)
                 appState.resetPolling()
             } catch {
                 let outcome = Self.tokenSaveFailureOutcome(for: error)
@@ -545,6 +549,9 @@ struct SettingsContentView: View {
             Self.logger.error(
                 "clearToken Keychain deletion failed: \(errorDescription, privacy: .public)"
             )
+            // Token may still exist in Keychain — don't clear UI state
+            tokenSaveErrorMessage = "Could not remove token: \(errorDescription)"
+            return
         }
         tokenInput = ""
         clearTokenSaveValidationState()
@@ -642,7 +649,7 @@ struct SettingsContentView: View {
 
 #Preview("Settings Content") {
     SettingsContentView()
-        .environmentObject(settingsPreviewAppState())
+        .environment(settingsPreviewAppState())
         .frame(width: 360)
         .background(Color.panelBackground)
 }

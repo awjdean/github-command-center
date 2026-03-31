@@ -1,7 +1,5 @@
 import SwiftUI
 
-let logSubsystem = Bundle.main.bundleIdentifier ?? "GitHubCommandCenter"
-
 enum Spacing {
     static let hairline: CGFloat = 1
     static let micro: CGFloat = 2

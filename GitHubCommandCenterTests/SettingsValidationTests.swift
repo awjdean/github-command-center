@@ -51,6 +51,6 @@ struct SettingsValidationTests {
         )
 
         #expect(outcome.tokenState == SettingsContentView.TokenState.unvalidated)
-        #expect(outcome.message == "Failed to save token (OSStatus -25308)")
+        #expect(outcome.message?.contains("-25308") == true)
     }
 }

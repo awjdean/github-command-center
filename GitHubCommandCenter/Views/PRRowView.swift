@@ -2,7 +2,7 @@ import OSLog
 import SwiftUI
 
 struct PRRowView: View {
-    private static let logger = Logger(subsystem: logSubsystem, category: "PRRowView")
+    private static let logger = Logger(subsystem: Log.subsystem, category: "PRRowView")
 
     let pr: PRState
     @State private var isHovered = false

@@ -27,7 +27,7 @@ enum PanelMode {
 }
 
 struct PRListView: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) private var appState
     @State private var panelMode: PanelMode
 
     init(initialPanelMode: PanelMode = .pullRequests) {
@@ -161,7 +161,7 @@ struct PRListView: View {
                         prSections
                     }
 
-                    if !appState.recentlyClosedPRs.isEmpty {
+                    if appState.showsRecentlyClosedSection {
                         sectionHeader("RECENTLY CLOSED")
                         ForEach(appState.recentlyClosedPRs) { pr in
                             PRRowView(pr: pr).opacity(0.5)
@@ -420,12 +420,12 @@ struct PRListView: View {
 
 #Preview("PR Panel") {
     PRListView()
-        .environmentObject(previewAppState(with: previewPRs))
+        .environment(previewAppState(with: previewPRs))
 }
 
 #Preview("Settings Panel") {
     PRListView(initialPanelMode: .settings)
-        .environmentObject(previewAppState())
+        .environment(previewAppState())
 }
 
 @MainActor

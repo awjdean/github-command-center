@@ -4,6 +4,10 @@ import Testing
 
 @Suite
 struct NotificationServiceTests {
+    private enum MockDeliveryError: Error, Equatable {
+        case failed
+    }
+
     private final class Harness {
         let service = NotificationService()
         var fired: [(String, String)] = []
@@ -244,5 +248,27 @@ struct NotificationServiceTests {
         harness.service.checkTransitions(from: [old], to: [new], disappeared: [])
 
         #expect(harness.fired.isEmpty)
+    }
+
+    @Test
+    func notification_deliveryFailure_surfacesError() {
+        let service = NotificationService()
+        var capturedError: MockDeliveryError?
+        service.notificationScheduler = { _, completion in
+            completion(MockDeliveryError.failed)
+        }
+        service.notificationDeliveryErrorHandler = { error in
+            capturedError = error as? MockDeliveryError
+        }
+
+        let old = PRState.fixture(ciStatus: .passing, createdByMe: true)
+        let new = PRState.fixture(
+            ciStatus: .failing(checks: [.init(name: "unit-tests", conclusion: "failure", url: nil)], totalChecks: 1),
+            createdByMe: true
+        )
+
+        service.checkTransitions(from: [old], to: [new], disappeared: [])
+
+        #expect(capturedError == .failed)
     }
 }

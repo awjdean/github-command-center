@@ -3,7 +3,7 @@ import SwiftUI
 @main
 @MainActor
 struct GitHubCommandCenterApp: App {
-    @StateObject private var appState: AppState
+    @State private var appState: AppState
 
     init() {
         self.init(
@@ -13,7 +13,7 @@ struct GitHubCommandCenterApp: App {
     }
 
     init(appState: AppState, shouldStartPolling: Bool = true) {
-        _appState = StateObject(wrappedValue: appState)
+        _appState = State(initialValue: appState)
         if shouldStartPolling {
             appState.startPollingIfNeeded()
         }
@@ -22,12 +22,12 @@ struct GitHubCommandCenterApp: App {
     var body: some Scene {
         MenuBarExtra {
             PRListView()
-                .environmentObject(appState)
+                .environment(appState)
         } label: {
             MenuBarIconView(
-                healthStatus: appState.healthStatus,
-                prCount: appState.menuBarBadgeCount,
-                isLoading: appState.isLoading
+                healthStatus: appState.panel.triageSnapshot.healthStatus,
+                prCount: appState.panel.triageSnapshot.menuBarBadgeCount,
+                isLoading: appState.panel.isLoading
             )
         }
         .menuBarExtraStyle(.window)

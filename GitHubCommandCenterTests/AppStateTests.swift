@@ -126,6 +126,32 @@ struct AppStateTests {
     }
 
     @Test
+    func recentlyClosedSectionVisibility_successfulEmptyState_showsSection() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.isLoading = false
+        appState.authenticationStatus = .authenticated(username: "octocat")
+        appState.recentlyClosedPRs = [.fixture(number: 99)]
+
+        #expect(appState.showsRecentlyClosedSection)
+    }
+
+    @Test
+    func recentlyClosedSectionVisibility_loadError_hidesSection() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        appState.isLoading = false
+        appState.error = .networkError
+        appState.recentlyClosedPRs = [.fixture(number: 99)]
+
+        #expect(!appState.showsRecentlyClosedSection)
+    }
+
+    @Test
     func panelSubtitle_authenticatedEmptyStateUsesTrackedLanguage() {
         let appState = AppState(
             makePollingEngine: { _ in StubPollingEngine() },
@@ -225,5 +251,74 @@ struct AppStateTests {
                 == "This app tracks pull requests involving @octocat. "
                 + "If you expected results here, make sure your GitHub token can access those repositories."
         )
+    }
+
+    @Test
+    func applyPollSnapshot_updatesPanelAndAuthState() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        let primaryPR = PRState.fixture(number: 1, reviewRequestedFromMe: true)
+        let closedPR = PRState.fixture(number: 99)
+        let timestamp = Date(timeIntervalSince1970: 12_345)
+        let snapshot = AppState.PollSnapshot(
+            panel: .init(
+                triageSnapshot: .build(from: [primaryPR]),
+                recentlyClosedPRs: [closedPR],
+                lastUpdated: timestamp,
+                isLoading: false,
+                error: nil,
+                isStale: false
+            ),
+            auth: .init(
+                authenticationStatus: .authenticated(username: "octocat"),
+                tokenValidationWarningMessage: nil
+            )
+        )
+
+        appState.applyPollSnapshot(snapshot)
+
+        #expect(appState.panel.triageSnapshot.prs.map(\.number) == [1])
+        #expect(appState.panel.recentlyClosedPRs.map(\.number) == [99])
+        #expect(appState.panel.lastUpdated == timestamp)
+        #expect(appState.panel.isLoading == false)
+        #expect(appState.panel.triageSnapshot.menuBarBadgeCount == 1)
+
+        if case .authenticated(let username) = appState.auth.authenticationStatus {
+            #expect(username == "octocat")
+        } else {
+            Issue.record("Expected authenticated auth state after applying snapshot")
+        }
+    }
+
+    @Test
+    func authStateMutation_preservesExistingPanelSnapshot() {
+        let appState = AppState(
+            makePollingEngine: { _ in StubPollingEngine() },
+            requestNotificationPermission: {}
+        )
+        let existingPRs = [
+            PRState.fixture(number: 1, reviewRequestedFromMe: true),
+            PRState.fixture(number: 2),
+        ]
+        appState.applyPollSnapshot(
+            .init(
+                panel: .init(
+                    triageSnapshot: .build(from: existingPRs),
+                    recentlyClosedPRs: [],
+                    lastUpdated: nil,
+                    isLoading: false,
+                    error: nil,
+                    isStale: false
+                ),
+                auth: .init(authenticationStatus: .unknown, tokenValidationWarningMessage: nil)
+            )
+        )
+        let originalSnapshot = appState.panel.triageSnapshot
+
+        appState.auth.authenticationStatus = .authenticated(username: "octocat")
+
+        #expect(appState.panel.triageSnapshot == originalSnapshot)
     }
 }

@@ -1,16 +1,33 @@
 import Foundation
+import OSLog
 import UserNotifications
 
 final class NotificationService {
     static let shared = NotificationService()
     private static let pullRequestUpdatesThreadIdentifier = "pull_request_updates"
+    private static let logger = Logger(subsystem: Log.subsystem, category: "NotificationService")
     private let stateQueue = DispatchQueue(label: "NotificationService.state")
     private var storedNotificationHandler: ((String, String) -> Void)?
+    private var storedNotificationScheduler:
+        (
+            (UNNotificationRequest, @escaping (Error?) -> Void) -> Void
+        )?
+    private var storedNotificationDeliveryErrorHandler: ((Error) -> Void)?
 
     // Injected in tests to capture fired notifications without UNUserNotificationCenter.
     var notificationHandler: ((String, String) -> Void)? {  // (title, body)
         get { stateQueue.sync { storedNotificationHandler } }
         set { stateQueue.sync { storedNotificationHandler = newValue } }
+    }
+
+    var notificationScheduler: ((UNNotificationRequest, @escaping (Error?) -> Void) -> Void)? {
+        get { stateQueue.sync { storedNotificationScheduler } }
+        set { stateQueue.sync { storedNotificationScheduler = newValue } }
+    }
+
+    var notificationDeliveryErrorHandler: ((Error) -> Void)? {
+        get { stateQueue.sync { storedNotificationDeliveryErrorHandler } }
+        set { stateQueue.sync { storedNotificationDeliveryErrorHandler = newValue } }
     }
 
     init() {}
@@ -127,6 +144,21 @@ final class NotificationService {
             content: content,
             trigger: nil
         )
-        UNUserNotificationCenter.current().add(request)
+        let scheduler = stateQueue.sync { storedNotificationScheduler }
+        let errorHandler = stateQueue.sync { storedNotificationDeliveryErrorHandler }
+        let submitRequest =
+            scheduler
+            ?? { request, completion in
+                UNUserNotificationCenter.current().add(request, withCompletionHandler: completion)
+            }
+
+        submitRequest(request) { error in
+            guard let error else { return }
+            let errorDescription = error.localizedDescription
+            Self.logger.error(
+                "Failed to deliver notification: \(errorDescription, privacy: .public)"
+            )
+            errorHandler?(error)
+        }
     }
 }

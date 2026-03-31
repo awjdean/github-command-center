@@ -1,7 +1,6 @@
 import Foundation
-import SwiftUI
+import Observation
 
-@MainActor
 protocol PollingControlling: AnyObject {
     func start()
     func stop()
@@ -9,7 +8,6 @@ protocol PollingControlling: AnyObject {
     func forceRefresh()
 }
 
-@MainActor
 final class NoOpPollingController: PollingControlling {
     func start() {}
     func stop() {}
@@ -18,40 +16,22 @@ final class NoOpPollingController: PollingControlling {
 }
 
 @MainActor
-final class AppState: ObservableObject {
-    @Published var prs: [PRState] = [] {
-        didSet {
-            recomputePRCaches()
-        }
-    }
-    @Published var recentlyClosedPRs: [PRState] = []  // Shown for one poll cycle
-    @Published var lastUpdated: Date?
-    @Published var isLoading = true
-    @Published var error: AppError?
-    @Published var isStale = false
-    @Published var authenticationStatus: AuthStatus = .unknown
-    @Published var tokenValidationWarningMessage: String?
-
-    var isRateLimited: Bool {
-        if case .rateLimitExceeded = error { return true } else { return false }
-    }
-
-    var rateLimitResetDate: Date? {
-        if case .rateLimitExceeded(let date) = error { return date } else { return nil }
-    }
-
-    enum AuthStatus {
+@Observable
+final class AppState {
+    enum AuthStatus: Equatable, Sendable {
         case unknown
         case authenticated(username: String)
         case failed
         case noToken
     }
 
-    enum HealthStatus {
-        case green, yellow, red
+    enum HealthStatus: Equatable, Sendable {
+        case green
+        case yellow
+        case red
     }
 
-    enum PanelContentState: Equatable {
+    enum PanelContentState: Equatable, Sendable {
         case loading
         case setupRequired
         case authError
@@ -60,80 +40,80 @@ final class AppState: ObservableObject {
         case prList
     }
 
-    // MARK: - Triage-sorted PR lists
+    struct TriageSnapshot: Equatable, Sendable {
+        var prs: [PRState]
+        var needsActionPRs: [PRState]
+        var waitingOnOthersPRs: [PRState]
+        var yourDraftPRs: [PRState]
+        var menuBarBadgeCount: Int
+        var healthStatus: HealthStatus
 
-    var needsActionPRs: [PRState] {
-        cachedNeedsActionPRs
-    }
+        static let empty = build(from: [])
 
-    var waitingOnOthersPRs: [PRState] {
-        cachedWaitingOnOthersPRs
-    }
+        static func build(from prs: [PRState]) -> TriageSnapshot {
+            let needsActionPRs =
+                prs
+                .filter { $0.triageCategory == .needsYourAction }
+                .sorted(using: PRState.needsActionComparator)
+            let waitingOnOthersPRs =
+                prs
+                .filter { $0.triageCategory == .waitingOnOthers }
+                .sorted { $0.updatedAt > $1.updatedAt }
+            let yourDraftPRs =
+                prs
+                .filter { $0.triageCategory == .yourDraft }
+                .sorted { $0.updatedAt > $1.updatedAt }
+            let menuBarBadgeCount = needsActionPRs.count
+            let healthStatus: HealthStatus
 
-    var yourDraftPRs: [PRState] {
-        cachedYourDraftPRs
-    }
-
-    var menuBarBadgeCount: Int {
-        needsActionPRs.count
-    }
-
-    var healthStatus: HealthStatus {
-        guard !prs.isEmpty else { return .green }
-        let needsAction = needsActionPRs
-        guard !needsAction.isEmpty else { return .green }
-        return needsAction.contains { $0.urgencyScore >= 3 } ? .red : .yellow
-    }
-
-    var panelSubtitleText: String {
-        switch authenticationStatus {
-        case .authenticated:
-            return "\(prs.count) tracked PR\(prs.count == 1 ? "" : "s")"
-        default:
-            return "\(prs.count) open PR\(prs.count == 1 ? "" : "s")"
-        }
-    }
-
-    var emptyStateMessage: String? {
-        guard !isLoading, prs.isEmpty else { return nil }
-        guard case .authenticated(let username) = authenticationStatus else { return nil }
-
-        return
-            "This app tracks pull requests involving @\(username). "
-            + "If you expected results here, make sure your GitHub token can access those repositories."
-    }
-
-    var panelContentState: PanelContentState {
-        if isLoading {
-            return .loading
-        }
-
-        guard prs.isEmpty else {
-            return .prList
-        }
-
-        switch authenticationStatus {
-        case .noToken:
-            return .setupRequired
-        case .failed:
-            return .authError
-        default:
-            if error != nil {
-                return .loadError
+            if prs.isEmpty || needsActionPRs.isEmpty {
+                healthStatus = .green
+            } else {
+                healthStatus = needsActionPRs.contains { $0.urgencyScore >= 3 } ? .red : .yellow
             }
-            return .empty
+
+            return TriageSnapshot(
+                prs: prs,
+                needsActionPRs: needsActionPRs,
+                waitingOnOthersPRs: waitingOnOthersPRs,
+                yourDraftPRs: yourDraftPRs,
+                menuBarBadgeCount: menuBarBadgeCount,
+                healthStatus: healthStatus
+            )
         }
     }
 
-    // MARK: - Polling lifecycle (owned by AppState to keep wiring simple)
+    struct PanelState: Equatable, Sendable {
+        var triageSnapshot: TriageSnapshot = .empty
+        var recentlyClosedPRs: [PRState] = []
+        var lastUpdated: Date?
+        var isLoading = true
+        var error: AppError?
+        var isStale = false
+    }
 
-    private var pollingEngine: (any PollingControlling)?
-    private let makePollingEngine: (AppState) -> any PollingControlling
-    private let requestNotificationPermission: () async -> Void
-    private let preloadTokenIfNeeded: () -> Void
-    private var cachedNeedsActionPRs: [PRState] = []
-    private var cachedWaitingOnOthersPRs: [PRState] = []
-    private var cachedYourDraftPRs: [PRState] = []
+    struct AuthState: Equatable, Sendable {
+        var authenticationStatus: AuthStatus = .unknown
+        var tokenValidationWarningMessage: String?
+    }
+
+    struct PollSnapshot: Equatable, Sendable {
+        var panel: PanelState
+        var auth: AuthState
+    }
+
+    struct PollContext: Equatable, Sendable {
+        var panel: PanelState
+        var auth: AuthState
+    }
+
+    var panel = PanelState()
+    var auth = AuthState()
+
+    @ObservationIgnored private var pollingEngine: (any PollingControlling)?
+    @ObservationIgnored private let makePollingEngine: (AppState) -> any PollingControlling
+    @ObservationIgnored private let requestNotificationPermission: () async -> Void
+    @ObservationIgnored private let preloadTokenIfNeeded: () -> Void
 
     init() {
         self.makePollingEngine = { PollingEngine(appState: $0) }
@@ -153,32 +133,134 @@ final class AppState: ObservableObject {
         self.preloadTokenIfNeeded = preloadTokenIfNeeded
     }
 
-    private func clearPublishedSessionState(preserveTokenValidationWarning: Bool = false) {
-        prs = []
-        recentlyClosedPRs = []
-        lastUpdated = nil
-        isLoading = true
-        error = nil
-        isStale = false
-        authenticationStatus = .unknown
-        if !preserveTokenValidationWarning {
-            tokenValidationWarningMessage = nil
+    var prs: [PRState] {
+        get { panel.triageSnapshot.prs }
+        set { panel.triageSnapshot = TriageSnapshot.build(from: newValue) }
+    }
+
+    var recentlyClosedPRs: [PRState] {
+        get { panel.recentlyClosedPRs }
+        set { panel.recentlyClosedPRs = newValue }
+    }
+
+    var lastUpdated: Date? {
+        get { panel.lastUpdated }
+        set { panel.lastUpdated = newValue }
+    }
+
+    var isLoading: Bool {
+        get { panel.isLoading }
+        set { panel.isLoading = newValue }
+    }
+
+    var error: AppError? {
+        get { panel.error }
+        set { panel.error = newValue }
+    }
+
+    var isStale: Bool {
+        get { panel.isStale }
+        set { panel.isStale = newValue }
+    }
+
+    var authenticationStatus: AuthStatus {
+        get { auth.authenticationStatus }
+        set { auth.authenticationStatus = newValue }
+    }
+
+    var tokenValidationWarningMessage: String? {
+        get { auth.tokenValidationWarningMessage }
+        set { auth.tokenValidationWarningMessage = newValue }
+    }
+
+    var needsActionPRs: [PRState] {
+        panel.triageSnapshot.needsActionPRs
+    }
+
+    var waitingOnOthersPRs: [PRState] {
+        panel.triageSnapshot.waitingOnOthersPRs
+    }
+
+    var yourDraftPRs: [PRState] {
+        panel.triageSnapshot.yourDraftPRs
+    }
+
+    var menuBarBadgeCount: Int {
+        panel.triageSnapshot.menuBarBadgeCount
+    }
+
+    var healthStatus: HealthStatus {
+        panel.triageSnapshot.healthStatus
+    }
+
+    var isRateLimited: Bool {
+        if case .rateLimitExceeded = panel.error {
+            return true
+        }
+
+        return false
+    }
+
+    var rateLimitResetDate: Date? {
+        if case .rateLimitExceeded(let date) = panel.error {
+            return date
+        }
+
+        return nil
+    }
+
+    var panelSubtitleText: String {
+        let prCount = panel.triageSnapshot.prs.count
+
+        switch auth.authenticationStatus {
+        case .authenticated:
+            return "\(prCount) tracked PR\(prCount == 1 ? "" : "s")"
+        default:
+            return "\(prCount) open PR\(prCount == 1 ? "" : "s")"
         }
     }
 
-    private func recomputePRCaches() {
-        cachedNeedsActionPRs =
-            prs
-            .filter { $0.triageCategory == .needsYourAction }
-            .sorted(using: PRState.needsActionComparator)
-        cachedWaitingOnOthersPRs =
-            prs
-            .filter { $0.triageCategory == .waitingOnOthers }
-            .sorted { $0.updatedAt > $1.updatedAt }
-        cachedYourDraftPRs =
-            prs
-            .filter { $0.triageCategory == .yourDraft }
-            .sorted { $0.updatedAt > $1.updatedAt }
+    var emptyStateMessage: String? {
+        guard !panel.isLoading, panel.triageSnapshot.prs.isEmpty else { return nil }
+        guard case .authenticated(let username) = auth.authenticationStatus else { return nil }
+
+        return
+            "This app tracks pull requests involving @\(username). "
+            + "If you expected results here, make sure your GitHub token can access those repositories."
+    }
+
+    var panelContentState: PanelContentState {
+        if panel.isLoading {
+            return .loading
+        }
+
+        guard panel.triageSnapshot.prs.isEmpty else {
+            return .prList
+        }
+
+        switch auth.authenticationStatus {
+        case .noToken:
+            return .setupRequired
+        case .failed:
+            return .authError
+        default:
+            if panel.error != nil {
+                return .loadError
+            }
+
+            return .empty
+        }
+    }
+
+    var showsRecentlyClosedSection: Bool {
+        guard !panel.recentlyClosedPRs.isEmpty else { return false }
+
+        switch panelContentState {
+        case .empty, .prList:
+            return true
+        case .loading, .setupRequired, .authError, .loadError:
+            return false
+        }
     }
 
     func startPollingIfNeeded() {
@@ -186,7 +268,6 @@ final class AppState: ObservableObject {
         preloadTokenIfNeeded()
         let engine = makePollingEngine(self)
         pollingEngine = engine
-        // Intentionally fire-and-forget: notification permission is non-fatal and should not block startup.
         Task { await requestNotificationPermission() }
         engine.start()
     }
@@ -195,33 +276,53 @@ final class AppState: ObservableObject {
         pollingEngine?.forceRefresh()
     }
 
+    func currentPollContext() -> PollContext {
+        PollContext(panel: panel, auth: auth)
+    }
+
+    func applyPollSnapshot(_ snapshot: PollSnapshot) {
+        panel = snapshot.panel
+        auth = snapshot.auth
+    }
+
+    func clearRecentlyClosedPRs() {
+        panel.recentlyClosedPRs = []
+    }
+
     func recomputeStaleness(now: Date = Date()) {
-        guard let lastUpdated else {
-            isStale = false
-            return
-        }
-        isStale = now.timeIntervalSince(lastUpdated) > 300
+        panel.isStale = Self.staleStatus(lastUpdated: panel.lastUpdated, now: now)
+    }
+
+    nonisolated static func staleStatus(lastUpdated: Date?, now: Date = Date()) -> Bool {
+        guard let lastUpdated else { return false }
+        return now.timeIntervalSince(lastUpdated) > 300
     }
 
     func clearSessionStateForNewSession() {
         pollingEngine?.reset()
-        clearPublishedSessionState()
+        clearObservedSessionState()
     }
 
     func stopPollingForMissingToken() {
         pollingEngine?.reset()
         pollingEngine?.stop()
         pollingEngine = nil
-        clearPublishedSessionState()
-        isLoading = false
-        authenticationStatus = .noToken
+        clearObservedSessionState()
+        panel.isLoading = false
+        auth.authenticationStatus = .noToken
     }
 
     func resetPolling() {
         pollingEngine?.reset()
         pollingEngine?.stop()
-        clearPublishedSessionState(preserveTokenValidationWarning: true)
+        clearObservedSessionState(preserveTokenValidationWarning: true)
         pollingEngine = nil
         startPollingIfNeeded()
+    }
+
+    private func clearObservedSessionState(preserveTokenValidationWarning: Bool = false) {
+        let warningMessage = preserveTokenValidationWarning ? auth.tokenValidationWarningMessage : nil
+        panel = PanelState()
+        auth = AuthState(authenticationStatus: .unknown, tokenValidationWarningMessage: warningMessage)
     }
 }

@@ -391,4 +391,39 @@ struct PollingEngineTests {
 
         #expect(harness.appState.isStale == false)
     }
+
+    @Test
+    func poll_success_populatesObservationSnapshots() async {
+        let harness = Harness()
+        let pr = PRState.fixture(number: 7, reviewRequestedFromMe: true)
+        harness.mockSource.validateTokenResult = .success("octocat")
+        harness.mockSource.fetchResult = .success([pr])
+
+        await harness.engine.poll()
+
+        #expect(harness.appState.panel.triageSnapshot.prs.map(\.number) == [7])
+        #expect(harness.appState.panel.triageSnapshot.needsActionPRs.map(\.number) == [7])
+        #expect(harness.appState.panel.triageSnapshot.menuBarBadgeCount == 1)
+
+        if case .authenticated(let username) = harness.appState.auth.authenticationStatus {
+            #expect(username == "octocat")
+        } else {
+            Issue.record("Expected authenticated auth state after polling")
+        }
+    }
+
+    @Test
+    func poll_samePRs_keepsDerivedSnapshotStable() async {
+        let harness = Harness()
+        let pr = PRState.fixture(number: 7, reviewRequestedFromMe: true)
+        harness.mockSource.validateTokenResult = .success("octocat")
+        harness.mockSource.fetchResult = .success([pr])
+
+        await harness.engine.poll()
+        let initialSnapshot = harness.appState.panel.triageSnapshot
+
+        await harness.engine.poll()
+
+        #expect(harness.appState.panel.triageSnapshot == initialSnapshot)
+    }
 }
