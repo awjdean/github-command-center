@@ -17,6 +17,7 @@ struct SettingsContentView: View {
     @State private var tokenAccessDetails: TokenAccessDetails?
     @State private var tokenAccessErrorMessage: String?
     @State private var tokenAccessTask: Task<Void, Never>?
+    @State private var tokenAccessTaskID: UUID?
     @State private var isValidating = false
     @State private var isLoadingTokenAccess = false
     @State private var isReposExpanded = false
@@ -568,6 +569,7 @@ struct SettingsContentView: View {
     private func clearTokenAccessState() {
         tokenAccessTask?.cancel()
         tokenAccessTask = nil
+        tokenAccessTaskID = nil
         tokenAccessDetails = nil
         tokenAccessErrorMessage = nil
         isLoadingTokenAccess = false
@@ -576,11 +578,16 @@ struct SettingsContentView: View {
     private func refreshTokenAccessDetails(using token: String) {
         clearTokenAccessState()
         isLoadingTokenAccess = true
+        let taskID = UUID()
+        tokenAccessTaskID = taskID
 
         tokenAccessTask = Task { @MainActor in
             defer {
-                isLoadingTokenAccess = false
-                tokenAccessTask = nil
+                if tokenAccessTaskID == taskID {
+                    isLoadingTokenAccess = false
+                    tokenAccessTask = nil
+                    tokenAccessTaskID = nil
+                }
             }
 
             do {
