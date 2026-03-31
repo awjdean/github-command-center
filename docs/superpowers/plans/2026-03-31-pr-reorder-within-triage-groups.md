@@ -121,7 +121,12 @@ struct PROrderStore {
     }
 
     func setOrder(_ ids: [String], for category: PRState.TriageCategory) {
-        defaults.set(ids, forKey: defaultsKey(for: category))
+        let key = defaultsKey(for: category)
+        guard !ids.isEmpty else {
+            defaults.removeObject(forKey: key)
+            return
+        }
+        defaults.set(ids, forKey: key)
     }
 
     func clearOrder(for category: PRState.TriageCategory) {

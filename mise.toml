@@ -75,10 +75,12 @@ run = [
   "swiftlint lint --fix",
 ]
 
+# `check` is the comprehensive verification pipeline: sync, style checks, and tests.
 [tasks.check]
 description = "Run all checks"
 depends = ["sync", "check-style", "test"]
 
+# `fix` intentionally only syncs and applies auto-fixes; it does not run tests or full checks.
 [tasks.fix]
 description = "Fix all formatting + lint issues"
 depends = ["sync", "fix-style"]
