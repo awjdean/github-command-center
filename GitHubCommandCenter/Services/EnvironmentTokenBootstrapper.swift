@@ -171,6 +171,7 @@ struct EnvironmentTokenBootstrapper {
     private func quotedToken(in value: String, quote: Character) -> String? {
         var token = ""
         var isEscaping = false
+        var foundClosingQuote = false
 
         for character in value.dropFirst() {
             if isEscaping {
@@ -185,13 +186,18 @@ struct EnvironmentTokenBootstrapper {
             }
 
             if character == quote {
-                return token.isEmpty ? nil : token
+                foundClosingQuote = true
+                break
             }
 
             token.append(character)
         }
 
-        return token.isEmpty ? nil : token
+        guard foundClosingQuote, !token.isEmpty else {
+            return nil
+        }
+
+        return token
     }
 
     /// Search roots for `.env.local` / `.env`, in priority order.

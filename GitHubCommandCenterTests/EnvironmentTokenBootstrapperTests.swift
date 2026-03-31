@@ -91,6 +91,31 @@ struct EnvironmentTokenBootstrapperTests {
     }
 
     @Test
+    func preloadIfNeeded_ignoresUnterminatedQuotedToken() throws {
+        let service = makeService()
+        defer { try? service.deleteToken() }
+
+        let rootDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+        try "export GITHUB_TOKEN=\"ghp_missing_quote\n".write(
+            to: rootDirectory.appendingPathComponent(".env"),
+            atomically: true,
+            encoding: .utf8
+        )
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+
+        let bootstrapper = EnvironmentTokenBootstrapper(
+            keychain: service,
+            environment: [:],
+            searchRoots: [rootDirectory]
+        )
+
+        #expect(!bootstrapper.preloadIfNeeded())
+        #expect(try service.loadToken() == nil)
+    }
+
+    @Test
     func defaultSearchRoots_putsDevEnvSearchRootFromPlistFirst() throws {
         let base = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
