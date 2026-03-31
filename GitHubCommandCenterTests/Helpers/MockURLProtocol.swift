@@ -10,7 +10,8 @@ final class MockURLProtocol: URLProtocol {
     }
 
     private struct Handler {
-        let urlContains: String
+        let description: String
+        let matches: (URL) -> Bool
         let response: MockResponse
         let persistent: Bool
     }
@@ -52,7 +53,8 @@ final class MockURLProtocol: URLProtocol {
             return
         }
         let handler = Handler(
-            urlContains: pattern,
+            description: pattern,
+            matches: { $0.absoluteString.contains(pattern) },
             response: MockResponse(data: data, statusCode: statusCode, headers: headers),
             persistent: persistent
         )
@@ -69,7 +71,53 @@ final class MockURLProtocol: URLProtocol {
         headers: [String: String] = [:]
     ) {
         let handler = Handler(
-            urlContains: pattern,
+            description: pattern,
+            matches: { $0.absoluteString.contains(pattern) },
+            response: MockResponse(data: Data(), statusCode: statusCode, headers: headers),
+            persistent: persistent
+        )
+        stateQueue.sync {
+            handlers.append(handler)
+        }
+    }
+
+    static func stub(
+        description: String,
+        persistent: Bool = false,
+        statusCode: Int = 200,
+        headers: [String: String] = [:],
+        matching matcher: @escaping (URL) -> Bool,
+        json: Any
+    ) {
+        let data: Data
+        do {
+            data = try JSONSerialization.data(withJSONObject: json)
+        } catch {
+            XCTFail("Failed to serialize JSON stub for matcher \(description): \(error)")
+            return
+        }
+
+        let handler = Handler(
+            description: description,
+            matches: matcher,
+            response: MockResponse(data: data, statusCode: statusCode, headers: headers),
+            persistent: persistent
+        )
+        stateQueue.sync {
+            handlers.append(handler)
+        }
+    }
+
+    static func stub(
+        description: String,
+        persistent: Bool = false,
+        statusCode: Int,
+        headers: [String: String] = [:],
+        matching matcher: @escaping (URL) -> Bool
+    ) {
+        let handler = Handler(
+            description: description,
+            matches: matcher,
             response: MockResponse(data: Data(), statusCode: statusCode, headers: headers),
             persistent: persistent
         )
@@ -95,11 +143,10 @@ final class MockURLProtocol: URLProtocol {
             return
         }
 
-        let urlStr = url.absoluteString
         let mock = Self.stateQueue.sync { () -> MockResponse? in
             Self.storedCapturedRequests.append(request)
 
-            guard let matchIndex = Self.handlers.firstIndex(where: { urlStr.contains($0.urlContains) }) else {
+            guard let matchIndex = Self.handlers.firstIndex(where: { $0.matches(url) }) else {
                 return nil
             }
 

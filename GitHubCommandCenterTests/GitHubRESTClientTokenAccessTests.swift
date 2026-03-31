@@ -1,8 +1,24 @@
+import Foundation
 import Testing
 
 @testable import GitHubCommandCenter
 
 extension GitHubRESTClientTests {
+    private func userReposPageMatcher(page: Int) -> (URL) -> Bool {
+        { url in
+            guard url.path == "/user/repos" else { return false }
+            let queryItems = Set(
+                URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                    .percentEncodedQuery?
+                    .split(separator: "&")
+                    .map(String.init) ?? []
+            )
+            return queryItems.contains("affiliation=owner,collaborator,organization_member")
+                && queryItems.contains("per_page=100")
+                && queryItems.contains("page=\(page)")
+        }
+    }
+
     @Test
     func fetchTokenAccessDetails_classicTokenParsesReportedScopes() async throws {
         let harness = Harness()
@@ -13,7 +29,8 @@ extension GitHubRESTClientTests {
             json: ["login": "octocat"]
         )
         MockURLProtocol.stub(
-            urlContains: "/user/repos?affiliation=owner,collaborator,organization_member&per_page=100&page=1",
+            description: "user repos page 1",
+            matching: userReposPageMatcher(page: 1),
             json: []
         )
 
@@ -33,7 +50,8 @@ extension GitHubRESTClientTests {
             json: ["login": "octocat"]
         )
         MockURLProtocol.stub(
-            urlContains: "/user/repos?affiliation=owner,collaborator,organization_member&per_page=100&page=1",
+            description: "user repos page 1",
+            matching: userReposPageMatcher(page: 1),
             json: []
         )
 
@@ -65,11 +83,13 @@ extension GitHubRESTClientTests {
         }
 
         MockURLProtocol.stub(
-            urlContains: "/user/repos?affiliation=owner,collaborator,organization_member&per_page=100&page=1",
+            description: "user repos page 1",
+            matching: userReposPageMatcher(page: 1),
             json: firstPage
         )
         MockURLProtocol.stub(
-            urlContains: "/user/repos?affiliation=owner,collaborator,organization_member&per_page=100&page=2",
+            description: "user repos page 2",
+            matching: userReposPageMatcher(page: 2),
             json: [
                 [
                     "id": 101,
@@ -128,12 +148,14 @@ extension GitHubRESTClientTests {
                 ]
             }
             MockURLProtocol.stub(
-                urlContains: "/user/repos?affiliation=owner,collaborator,organization_member&per_page=100&page=\(page)",
+                description: "user repos page \(page)",
+                matching: userReposPageMatcher(page: page),
                 json: repositories
             )
         }
         MockURLProtocol.stub(
-            urlContains: "/user/repos?affiliation=owner,collaborator,organization_member&per_page=100&page=11",
+            description: "user repos page 11",
+            matching: userReposPageMatcher(page: 11),
             json: []
         )
 
