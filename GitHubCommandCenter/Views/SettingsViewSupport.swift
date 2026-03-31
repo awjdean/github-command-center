@@ -9,9 +9,9 @@ struct ScopeItem: Identifiable {
 private struct SettingsCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .padding(Spacing.xl)
+            .padding(Theme.Spacing.xl)
             .background(Theme.Colors.panelSurface)
-            .clipShape(RoundedRectangle(cornerRadius: Spacing.lg))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Spacing.lg))
     }
 }
 
@@ -22,7 +22,7 @@ extension View {
 }
 
 struct FlowLayout: Layout {
-    var spacing: CGFloat = Spacing.xxs
+    var spacing: CGFloat = Theme.Spacing.xxs
 
     struct Cache {
         var size: CGSize = .zero

@@ -10,14 +10,14 @@ struct PRRowView: View {
     @State private var openErrorMessage = ""
 
     var body: some View {
-        HStack(spacing: Spacing.sm) {
-            VStack(alignment: .leading, spacing: Spacing.micro) {
-                HStack(spacing: Spacing.xs) {
+        HStack(spacing: Theme.Spacing.sm) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.micro) {
+                HStack(spacing: Theme.Spacing.xs) {
                     Button {
                         openPullRequest()
                     } label: {
                         Text("#\(pr.number)")
-                            .font(.prNumber)
+                            .font(Theme.Fonts.prNumber)
                             .foregroundColor(Theme.Colors.linkBlue)
                             .underline()
                     }
@@ -27,10 +27,10 @@ struct PRRowView: View {
                         Text(pr.displayRole)
                             .font(.system(size: 9, weight: .medium))
                             .foregroundColor(Theme.Colors.textMuted)
-                            .padding(.horizontal, Spacing.xxs)
+                            .padding(.horizontal, Theme.Spacing.xxs)
                             .padding(.vertical, 1)
                             .background(Theme.Colors.panelSurface)
-                            .cornerRadius(Spacing.xxxs)
+                            .cornerRadius(Theme.Spacing.xxxs)
                     }
 
                     Spacer()
@@ -39,24 +39,24 @@ struct PRRowView: View {
                         Text("DRAFT")
                             .font(.system(size: 8, weight: .semibold))
                             .foregroundColor(Theme.Colors.textMuted)
-                            .padding(.horizontal, Spacing.xxxs)
+                            .padding(.horizontal, Theme.Spacing.xxxs)
                             .padding(.vertical, 1)
                             .overlay(
-                                RoundedRectangle(cornerRadius: Spacing.xxxs)
+                                RoundedRectangle(cornerRadius: Theme.Spacing.xxxs)
                                     .stroke(Theme.Colors.textMuted.opacity(0.5), lineWidth: 0.5)
                             )
                     }
                 }
 
                 Text(pr.title)
-                    .font(.prTitle)
+                    .font(Theme.Fonts.prTitle)
                     .foregroundColor(Theme.Colors.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
 
-                HStack(spacing: Spacing.xs) {
+                HStack(spacing: Theme.Spacing.xs) {
                     Text(pr.repoFullName)
-                        .font(.prRepo)
+                        .font(Theme.Fonts.prRepo)
                         .foregroundColor(Theme.Colors.textMuted)
 
                     Spacer()
@@ -69,8 +69,8 @@ struct PRRowView: View {
                 }
             }
         }
-        .padding(.horizontal, Spacing.xl)
-        .padding(.vertical, Spacing.sm)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, Theme.Spacing.sm)
         .background(isHovered ? Theme.Colors.panelSurface : Color.clear)
         .contentShape(Rectangle())
         .onHover { hovering in

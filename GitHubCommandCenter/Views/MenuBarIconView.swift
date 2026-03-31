@@ -16,7 +16,7 @@ struct MenuBarIconView: View {
     }
 
     var body: some View {
-        HStack(spacing: Spacing.xxxs) {
+        HStack(spacing: Theme.Spacing.xxxs) {
             if isLoading {
                 MenuBarLoadingIndicator()
             } else {
@@ -39,6 +39,7 @@ private struct MenuBarLoadingIndicator: View {
             .imageScale(.medium)
             .opacity(tick ? 1.0 : 0.35)
             .task {
+                tick = true
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .milliseconds(700))
                     withAnimation(.easeInOut(duration: 0.35)) {

@@ -48,14 +48,14 @@ struct SettingsContentView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.xl) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
             tokenSection
             aboutSection
             if showsAppControls {
                 appControlsSection
             }
         }
-        .padding(Spacing.xxl)
+        .padding(Theme.Spacing.xxl)
         .preferredColorScheme(.dark)
         .onAppear {
             launchAtLogin = (SMAppService.mainApp.status == .enabled)
@@ -87,12 +87,12 @@ struct SettingsContentView: View {
     }
 
     private func connectedView(username: String) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.lg) {
-            HStack(spacing: Spacing.md) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            HStack(spacing: Theme.Spacing.md) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 16))
                     .foregroundColor(Theme.Colors.statusGreen)
-                VStack(alignment: .leading, spacing: Spacing.micro) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.micro) {
                     Text("@\(username)")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(Theme.Colors.textPrimary)
@@ -102,7 +102,7 @@ struct SettingsContentView: View {
                 }
                 Spacer()
             }
-            .padding(Spacing.lg)
+            .padding(Theme.Spacing.lg)
             .background(Theme.Colors.statusGreen.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
@@ -111,7 +111,7 @@ struct SettingsContentView: View {
             )
 
             if let tokenValidationWarningMessage = appState.tokenValidationWarningMessage {
-                HStack(alignment: .top, spacing: Spacing.xs) {
+                HStack(alignment: .top, spacing: Theme.Spacing.xs) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 12))
                         .foregroundColor(Theme.Colors.statusYellow)
@@ -120,7 +120,7 @@ struct SettingsContentView: View {
                         .foregroundColor(Theme.Colors.statusYellow)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(Spacing.md)
+                .padding(Theme.Spacing.md)
                 .background(Theme.Colors.statusYellow.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(
@@ -134,7 +134,7 @@ struct SettingsContentView: View {
             Button(role: .destructive) {
                 clearToken()
             } label: {
-                HStack(spacing: Spacing.xxs) {
+                HStack(spacing: Theme.Spacing.xxs) {
                     Image(systemName: "trash")
                         .font(.system(size: 10))
                     Text("Remove Token")
@@ -151,7 +151,7 @@ struct SettingsContentView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundColor(Theme.Colors.textPrimary)
-                .padding(Spacing.md)
+                .padding(Theme.Spacing.md)
                 .background(Color.black.opacity(0.25))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(
@@ -167,7 +167,7 @@ struct SettingsContentView: View {
                 }
 
             if case .invalid = tokenState {
-                HStack(spacing: Spacing.xs) {
+                HStack(spacing: Theme.Spacing.xs) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 12))
                         .foregroundColor(Theme.Colors.statusRed)
@@ -179,7 +179,7 @@ struct SettingsContentView: View {
             }
 
             if let tokenSaveErrorMessage {
-                HStack(spacing: Spacing.xs) {
+                HStack(spacing: Theme.Spacing.xs) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 12))
                         .foregroundColor(Theme.Colors.statusRed)
@@ -195,7 +195,7 @@ struct SettingsContentView: View {
 
             if let url = SettingsLinks.personalAccessTokens {
                 Link(destination: url) {
-                    HStack(spacing: Spacing.xxs) {
+                    HStack(spacing: Theme.Spacing.xxs) {
                         Image(systemName: "arrow.up.right.square")
                             .font(.system(size: 10))
                         Text("Manage personal access tokens")
@@ -205,11 +205,11 @@ struct SettingsContentView: View {
                 }
             }
 
-            HStack(spacing: Spacing.sm) {
+            HStack(spacing: Theme.Spacing.sm) {
                 Button {
                     saveToken()
                 } label: {
-                    HStack(spacing: Spacing.xxs) {
+                    HStack(spacing: Theme.Spacing.xxs) {
                         if isValidating {
                             ProgressView()
                                 .controlSize(.small)
@@ -238,7 +238,7 @@ struct SettingsContentView: View {
     // MARK: - Scope Info
 
     private var scopeInfo: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("APP REQUIREMENTS")
                 .font(.system(size: 9, weight: .bold))
                 .tracking(1.2)
@@ -265,7 +265,7 @@ struct SettingsContentView: View {
     }
 
     private func scopeRow(scopes: [ScopeItem]) -> some View {
-        FlowLayout(spacing: Spacing.xxs) {
+        FlowLayout(spacing: Theme.Spacing.xxs) {
             ForEach(scopes) { scope in
                 scopeBadge(scope.name, optional: scope.isOptional)
             }
@@ -275,7 +275,7 @@ struct SettingsContentView: View {
     @ViewBuilder
     private var tokenAccessSection: some View {
         if isLoadingTokenAccess {
-            HStack(spacing: Spacing.sm) {
+            HStack(spacing: Theme.Spacing.sm) {
                 ProgressView()
                     .controlSize(.small)
                 Text("Loading token access…")
@@ -283,7 +283,7 @@ struct SettingsContentView: View {
                     .foregroundColor(Theme.Colors.textSecondary)
             }
         } else if let tokenAccessDetails {
-            VStack(alignment: .leading, spacing: Spacing.lg) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
                 tokenPermissionsSection(details: tokenAccessDetails)
                 accessibleRepositoriesSection(details: tokenAccessDetails)
             }
@@ -296,7 +296,7 @@ struct SettingsContentView: View {
     }
 
     private func tokenPermissionsSection(details: TokenAccessDetails) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("REPORTED PERMISSIONS")
                 .font(.system(size: 9, weight: .bold))
                 .tracking(1.2)
@@ -318,7 +318,7 @@ struct SettingsContentView: View {
     }
 
     private func accessibleRepositoriesSection(details: TokenAccessDetails) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isReposExpanded.toggle()
@@ -348,7 +348,7 @@ struct SettingsContentView: View {
                         .font(.system(size: 10))
                         .foregroundColor(Theme.Colors.textTertiary)
                 } else {
-                    VStack(spacing: Spacing.xs) {
+                    VStack(spacing: Theme.Spacing.xs) {
                         ForEach(details.accessibleRepositories) { repository in
                             accessibleRepositoryRow(repository)
                         }
@@ -359,21 +359,21 @@ struct SettingsContentView: View {
     }
 
     private func accessibleRepositoryRow(_ repository: TokenAccessDetails.AccessibleRepository) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: Spacing.sm) {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
             Text(repository.fullName)
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundColor(Theme.Colors.textSecondary)
                 .lineLimit(1)
 
-            Spacer(minLength: Spacing.sm)
+            Spacer(minLength: Theme.Spacing.sm)
 
             Text(repository.accessLevel.rawValue)
                 .font(.system(size: 9, weight: .semibold, design: .monospaced))
                 .foregroundColor(accessLevelColor(repository.accessLevel))
-                .padding(.horizontal, Spacing.xs)
-                .padding(.vertical, Spacing.micro)
+                .padding(.horizontal, Theme.Spacing.xs)
+                .padding(.vertical, Theme.Spacing.micro)
                 .background(accessLevelColor(repository.accessLevel).opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: Spacing.xxs))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Spacing.xxs))
         }
     }
 
@@ -389,7 +389,7 @@ struct SettingsContentView: View {
     }
 
     private func scopeBadge(_ text: String, optional: Bool = false) -> some View {
-        HStack(spacing: Spacing.xxxs) {
+        HStack(spacing: Theme.Spacing.xxxs) {
             Text(text)
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
             if optional {
@@ -400,11 +400,11 @@ struct SettingsContentView: View {
         }
         .foregroundColor(optional ? Theme.Colors.textTertiary : Theme.Colors.textSecondary)
         .padding(.horizontal, 7)
-        .padding(.vertical, Spacing.xxxs)
+        .padding(.vertical, Theme.Spacing.xxxs)
         .background(Theme.Colors.panelBackground.opacity(0.8))
-        .clipShape(RoundedRectangle(cornerRadius: Spacing.xxs))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Spacing.xxs))
         .overlay(
-            RoundedRectangle(cornerRadius: Spacing.xxs)
+            RoundedRectangle(cornerRadius: Theme.Spacing.xxs)
                 .stroke(Theme.Colors.textMuted.opacity(0.25), lineWidth: 0.5)
         )
     }
@@ -448,18 +448,18 @@ struct SettingsContentView: View {
 
     private var aboutSection: some View {
         HStack {
-            VStack(alignment: .leading, spacing: Spacing.xs) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text("GitHub Command Center")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(Theme.Colors.textPrimary)
-                HStack(spacing: Spacing.sm) {
+                HStack(spacing: Theme.Spacing.sm) {
                     Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0")")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundColor(Theme.Colors.textTertiary)
-                        .padding(.horizontal, Spacing.xs)
-                        .padding(.vertical, Spacing.micro)
+                        .padding(.horizontal, Theme.Spacing.xs)
+                        .padding(.vertical, Theme.Spacing.micro)
                         .background(Theme.Colors.panelBackground.opacity(0.8))
-                        .clipShape(RoundedRectangle(cornerRadius: Spacing.xxs))
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.Spacing.xxs))
                     Text("MIT License")
                         .font(.system(size: 11))
                         .foregroundColor(Theme.Colors.textTertiary)
@@ -468,7 +468,7 @@ struct SettingsContentView: View {
             Spacer()
             if let url = SettingsLinks.projectRepository {
                 Link(destination: url) {
-                    HStack(spacing: Spacing.xxs) {
+                    HStack(spacing: Theme.Spacing.xxs) {
                         Image(systemName: "arrow.up.right.square")
                             .font(.system(size: 10))
                         Text("View on GitHub")
@@ -532,10 +532,9 @@ struct SettingsContentView: View {
                 let client = GitHubRESTClient(token: tokenToSave)
                 let validationResult = try await client.validateTokenForAppAccess()
                 guard !Task.isCancelled, tokenInput == tokenToSave else { return }
-                let successOutcome = Self.tokenSaveSuccessOutcome(for: validationResult)
-                guard !Task.isCancelled else { return }
                 try KeychainService.shared.saveToken(tokenToSave)
                 guard !Task.isCancelled, tokenInput == tokenToSave else { return }
+                let successOutcome = Self.tokenSaveSuccessOutcome(for: validationResult)
                 withAnimation(.easeInOut(duration: 0.2)) {
                     tokenState = successOutcome.tokenState
                 }

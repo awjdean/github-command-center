@@ -27,7 +27,7 @@ struct StatusDotView: View {
                         .foregroundColor(accessibilityForegroundColor)
                 }
             }
-            .padding(8)
+            .frame(minWidth: 44, minHeight: 44)
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -220,20 +220,20 @@ private struct CIFailingPopoverView: View {
     let totalChecks: Int
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("CI")
-                .font(.sectionLabel)
+                .font(Theme.Fonts.sectionLabel)
                 .tracking(0.5)
                 .foregroundColor(Theme.Colors.textTertiary)
 
             Text("\(checks.count) of \(totalChecks) checks failing")
-                .font(.footerText)
+                .font(Theme.Fonts.footerText)
                 .foregroundColor(Theme.Colors.textSecondary)
 
             Divider().background(Theme.Colors.textMuted.opacity(0.3))
 
             ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.xs) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     ForEach(checks) { check in
                         failingCheckRow(check)
                     }
@@ -241,24 +241,24 @@ private struct CIFailingPopoverView: View {
             }
             .frame(maxHeight: 300)
         }
-        .padding(.horizontal, Spacing.lg)
-        .padding(.vertical, Spacing.md)
+        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.vertical, Theme.Spacing.md)
         .frame(maxWidth: 320)
     }
 
     private func failingCheckRow(_ check: PRState.FailingCheck) -> some View {
-        HStack(spacing: Spacing.xs) {
+        HStack(spacing: Theme.Spacing.xs) {
             Circle()
                 .fill(Theme.Colors.statusRed)
                 .frame(width: 6, height: 6)
 
-            VStack(alignment: .leading, spacing: Spacing.hairline) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 if let url = check.url {
                     Button {
                         NSWorkspace.shared.open(url)
                     } label: {
                         Text(check.name)
-                            .font(.tooltipDetail)
+                            .font(Theme.Fonts.tooltipDetail)
                             .foregroundColor(Theme.Colors.linkBlue)
                             .underline()
                             .lineLimit(1)
@@ -266,13 +266,13 @@ private struct CIFailingPopoverView: View {
                     .buttonStyle(.plain)
                 } else {
                     Text(check.name)
-                        .font(.tooltipDetail)
+                        .font(Theme.Fonts.tooltipDetail)
                         .foregroundColor(Theme.Colors.textSecondary)
                         .lineLimit(1)
                 }
 
                 Text(conclusionLabel(check.conclusion))
-                    .font(.tooltipLabel)
+                    .font(Theme.Fonts.tooltipLabel)
                     .foregroundColor(Theme.Colors.textMuted)
             }
 
@@ -298,17 +298,17 @@ private struct StatusPopoverView: View {
     let detail: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.xxs) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
             Text(label)
-                .font(.sectionLabel)
+                .font(Theme.Fonts.sectionLabel)
                 .tracking(0.5)
                 .foregroundColor(Theme.Colors.textTertiary)
             Text(detail)
-                .font(.footerText)
+                .font(Theme.Fonts.footerText)
                 .foregroundColor(Theme.Colors.textSecondary)
         }
-        .padding(.horizontal, Spacing.md)
-        .padding(.vertical, Spacing.sm)
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.sm)
         .fixedSize()
     }
 }
