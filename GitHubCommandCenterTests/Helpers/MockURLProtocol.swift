@@ -1,4 +1,5 @@
 import Foundation
+import XCTest
 
 /// Pattern-matched URLProtocol for unit testing URLSession-based code.
 /// Register stubs before each test; call `reset()` in tearDown.
@@ -43,7 +44,13 @@ final class MockURLProtocol: URLProtocol {
         headers: [String: String] = [:],
         json: Any
     ) {
-        let data = (try? JSONSerialization.data(withJSONObject: json)) ?? Data()
+        let data: Data
+        do {
+            data = try JSONSerialization.data(withJSONObject: json)
+        } catch {
+            XCTFail("Failed to serialize JSON stub for pattern \(pattern): \(error)")
+            data = Data()
+        }
         let handler = Handler(
             urlContains: pattern,
             response: MockResponse(data: data, statusCode: statusCode, headers: headers),
@@ -110,7 +117,9 @@ final class MockURLProtocol: URLProtocol {
         }
 
         var headerFields = mock.headers
-        headerFields["Content-Type"] = "application/json"
+        if headerFields["Content-Type"] == nil, !mock.data.isEmpty {
+            headerFields["Content-Type"] = "application/json"
+        }
 
         guard
             let response = HTTPURLResponse(
